@@ -7,7 +7,7 @@ var EncountersArray = [];
 var React = window.React;
 
 var options = ((search) => {
-  let options = {};
+  var options = {};
 
   if (search[0] === '?') {
     search.slice(1).split(',').map(pair => pair.split('=')).forEach(([k, v]) => {
@@ -22,7 +22,7 @@ var options = ((search) => {
 
 var formatName = (name) => {
   if (name == 'YOU') {
-    return options.you;
+    return options.you.replace(/_/g, " ");
   } else {
     return name;
   }
