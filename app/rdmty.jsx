@@ -248,7 +248,7 @@ class Header extends React.Component {
                     <div 
                         className="ff-header"
                         style={{float:'right', paddingLeft:'1em'}}>
-                        rdps: {rdps}
+                        rdps: {formatNumber(rdps)}
                     </div>
                     <div 
                         className="ff-header"
