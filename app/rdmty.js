@@ -26,17 +26,17 @@ var formatName = name => {
     if (name == 'YOU') {
         return options.you;
     } else {
-        return name.split(" ")[0];
+        return name;
     }
 };
 
 var formatNumber = number => {
     number = parseFloat(number, 10);
 
-    if (number >= 1000) {
-        return (number / 1000).toFixed(2) + 'K';
-    } else if (number >= 1000000) {
+    if (number >= 1000000) {
         return (number / 1000000).toFixed(2) + 'M';
+    } else if (number >= 1000) {
+        return (number / 1000).toFixed(2) + 'K';
     }
 
     return number.toFixed(2);

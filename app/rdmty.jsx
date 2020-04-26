@@ -24,7 +24,7 @@ var formatName = (name) => {
   if (name == 'YOU') {
     return options.you;
   } else {
-    return name.split(" ")[0];
+    return name;
   }
 }
 
