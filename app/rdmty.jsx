@@ -6,6 +6,28 @@ var EncountersArray = [];
 
 var React = window.React;
 
+var options = ((search) => {
+  let options = {};
+
+  if (search[0] === '?') {
+    search.slice(1).split(',').map(pair => pair.split('=')).forEach(([k, v]) => {
+      options[k] = v;
+    });
+  }
+
+  return {
+    you: (options.you || 'YOU'),
+  }
+})(document.location.search);
+
+var formatName = (name) => {
+  if (name == 'YOU') {
+    return options.you;
+  } else {
+    return name.split(" ")[0];
+  }
+}
+
 var formatNumber = (number) => {
     number = parseFloat(number, 10);
 
@@ -18,6 +40,7 @@ var formatNumber = (number) => {
 
     return number.toFixed(2);
 };
+
 class CombatantCompact extends React.Component {
     jobImage(job) {
         if (window.JSFIDDLE) {
@@ -69,7 +92,7 @@ class CombatantCompact extends React.Component {
                                 {this.props.rank}.
                             </span>
                             <span className="character-name">
-                                {this.props.characterName}
+                                {formatName(this.props.characterName)}
                             </span>
                             <span className="character-job">
                                 {this.props.job}
@@ -80,6 +103,7 @@ class CombatantCompact extends React.Component {
         );
     }
 }
+
 CombatantCompact.defaultProps = {
     onClick() {}
 };
@@ -223,8 +247,13 @@ class Header extends React.Component {
 
                     <div 
                         className="ff-header"
+                        style={{float:'right', paddingLeft:'1em'}}>
+                        rdps: {rdps}
+                    </div>
+                    <div 
+                        className="ff-header"
                         onClick={this.handleEndEncounter}
-                        style={{float:'right'}}>
+                        style={{float:'right', cursor: 'pointer'}}>
                         End Encounter
                     </div>
                 </div>
