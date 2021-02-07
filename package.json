@@ -9,6 +9,6 @@
     "prettier": "^2.2.1"
   },
   "scripts": {
-    "build": "babel app/rdmty.jsx --out-file lib/rdmty.js --watch"
+    "build": "babel app/meters.jsx --out-file lib/meters.js --watch"
   }
 }
