@@ -534,46 +534,31 @@ class DamageMeter extends React.Component {
       });
     }
     this.render();
-    console.log("handle select", index);
   }
 
   render() {
     const debug = false;
-    let data = this.props.parseData.Combatant;
-    let encounterData = this.props.parseData.Encounter;
+    let data, encounterData;
 
     if (this.state.selectedEncounter) {
       data = this.state.selectedEncounter.Combatant;
       encounterData = this.state.selectedEncounter.Encounter;
     } else {
-      // Healing
-      // need to resort data if currentView is not damage
-      if (this.state.currentViewIndex === 1) {
-        data = _.sortBy(
-          _.filter(data, (d) => {
-            return parseInt(d.healed, 10) > 0;
-          }),
-          (d) => {
-            if (this.state.currentViewIndex === 1) {
-              return -parseInt(d.healed, 10);
-            }
-          }
-        );
-      }
-      // Tanking
-      else if (this.state.currentViewIndex === 2) {
-        data = _.sortBy(
-          _.filter(data, (d) => {
-            return parseInt(d.damagetaken, 10) > 0;
-          }),
-          (d) => {
-            if (this.state.currentViewIndex === 2) {
-              return -parseInt(d.damagetaken, 10);
-            }
-          }
-        );
-      }
+      data = this.props.parseData.Combatant;
+      encounterData = this.props.parseData.Encounter;
     }
+
+    const stat = {
+      0: "damage",
+      1: "healed",
+      2: "damagetaken",
+    }[this.state.currentViewIndex];
+
+    // Damage
+    data = _.sortBy(
+      _.filter(data, (d) => parseInt(d[stat]) > 0),
+      (d) => -parseInt(d[stat])
+    );
 
     return (
       <div
