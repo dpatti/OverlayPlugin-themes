@@ -1,5 +1,6 @@
+/* global _, OverlayPluginApi */
 const IMAGE_PATH = "images";
-const History = [];
+const EncounterHistory = [];
 
 const React = window.React;
 
@@ -44,6 +45,10 @@ const formatNumber = (number) => {
 };
 
 class CombatantCompact extends React.Component {
+  static defaultProps = {
+    onClick() {},
+  };
+
   jobImage(job) {
     return IMAGE_PATH + "/default/" + job.toLowerCase() + ".png";
   }
@@ -88,17 +93,14 @@ class CombatantCompact extends React.Component {
   }
 }
 
-CombatantCompact.defaultProps = {
-  onClick() {},
-};
-
-class ChartView extends React.Component {
-  render() {
-    return <div className="chart-view"></div>;
-  }
-}
-
 class Header extends React.Component {
+  static defaultProps = {
+    encounter: {},
+    onViewChange() {},
+    onSelectEncounter() {},
+    onExtraDetailsClick() {},
+  };
+
   constructor(props) {
     super(props);
     this.state = {
@@ -126,19 +128,15 @@ class Header extends React.Component {
     });
   }
 
-  /**
-   * Show dropdown for list of encounters
-   */
-  handleEncounterClick(e) {
+  // Show dropdown for list of encounters
+  handleEncounterClick() {
     this.setState({
       showEncountersList: !this.state.showEncountersList,
     });
   }
 
-  /**
-   * Toggle between group and indidivual stats.
-   */
-  handleToggleStats(e) {
+  // Toggle between group and indidivual stats.
+  handleToggleStats() {
     this.setState({
       group: !this.state.group,
     });
@@ -156,10 +154,6 @@ class Header extends React.Component {
     const self = data["YOU"];
 
     const rdps = parseFloat(encounter.encdps);
-    let rdps_max = 0;
-    if (!isNaN(rdps) && rdps !== Infinity) {
-      rdps_max = Math.max(rdps_max, rdps);
-    }
 
     // This is the switcher for Toggling group info or self info
     let DataSource = this.state.group ? encounter : self;
@@ -174,7 +168,7 @@ class Header extends React.Component {
     if (this.state.group) {
       if (data !== undefined) {
         for (let x in data) {
-          if (!data.hasOwnProperty(x)) continue;
+          if (!Object.prototype.hasOwnProperty.call(data, x)) continue;
           DirectHitPct += parseFloat(
             data[x].DirectHitPct.substring(0, data[x].DirectHitPct.length - 1)
           );
@@ -217,7 +211,7 @@ class Header extends React.Component {
                 <div onClick={this.props.onSelectEncounter.bind(this, null)}>
                   Current Fight
                 </div>
-                {History.map((encounter, i) => (
+                {EncounterHistory.map((encounter, i) => (
                   <div
                     key={i}
                     onClick={this.props.onSelectEncounter.bind(this, i)}
@@ -346,14 +340,11 @@ class Header extends React.Component {
   }
 }
 
-Header.defaultProps = {
-  encounter: {},
-  onViewChange() {},
-  onSelectEncounter() {},
-  onExtraDetailsClick() {},
-};
-
 class Combatants extends React.Component {
+  static defaultProps = {
+    onClick() {},
+  };
+
   shouldComponentUpdate(nextProps) {
     // if data is empty then don't re-render
     if (Object.getOwnPropertyNames(nextProps.data).length === 0) {
@@ -430,11 +421,14 @@ class Combatants extends React.Component {
     return <ul className="combatants">{rows}</ul>;
   }
 }
-Combatants.defaultProps = {
-  onClick() {},
-};
 
 class DamageMeter extends React.Component {
+  static defaultProps = {
+    chartViews: ["Damage", "Healing", "Tanking"],
+    parseData: {},
+    noJobColors: false,
+  };
+
   constructor(props) {
     super(props);
     this.state = {
@@ -454,29 +448,29 @@ class DamageMeter extends React.Component {
     return true;
   }
 
-  componentWillReceiveProps(nextProps) {
+  UNSAFE_componentWillReceiveProps(nextProps) {
     // save this encounter data
     if (
       this.props.parseData.Encounter.title === "Encounter" &&
       nextProps.parseData.Encounter.title !== "Encounter"
     ) {
-      History.unshift({
+      EncounterHistory.unshift({
         Encounter: nextProps.parseData.Encounter,
         Combatant: nextProps.parseData.Combatant,
       });
 
       // Only keep the last 10 fights
-      if (History.length > 10) {
-        History.pop();
+      if (EncounterHistory.length > 10) {
+        EncounterHistory.pop();
       }
     }
   }
 
-  handleCombatRowClick(e) {}
+  handleCombatRowClick() {}
 
-  handleClick(e) {}
+  handleClick() {}
 
-  handleViewChange(e) {
+  handleViewChange() {
     let index = this.state.currentViewIndex;
 
     if (index > this.props.chartViews.length - 2) {
@@ -490,10 +484,10 @@ class DamageMeter extends React.Component {
     });
   }
 
-  handleSelectEncounter(index, e) {
+  handleSelectEncounter(index) {
     if (index >= 0) {
       this.setState({
-        selectedEncounter: History[index],
+        selectedEncounter: EncounterHistory[index],
       });
     } else {
       this.setState({
@@ -557,12 +551,6 @@ class DamageMeter extends React.Component {
   }
 }
 
-DamageMeter.defaultProps = {
-  chartViews: ["Damage", "Healing", "Tanking"],
-  parseData: {},
-  noJobColors: false,
-};
-
 class Debugger extends React.Component {
   constructor(props) {
     super(props);
@@ -576,3 +564,5 @@ class Debugger extends React.Component {
     return <pre style={css}>{JSON.stringify(this.props.data, null, 2)}</pre>;
   }
 }
+
+window.DamageMeter = DamageMeter;
