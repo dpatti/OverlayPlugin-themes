@@ -1,5 +1,5 @@
 const IMAGE_PATH = "images";
-const EncountersArray = [];
+const History = [];
 
 const React = window.React;
 
@@ -29,6 +29,8 @@ const formatName = (name) => {
   }
 };
 
+const formatEncounter = (enc) => `${enc.title} (${enc.duration})`;
+
 const formatNumber = (number) => {
   number = parseFloat(number, 10);
 
@@ -43,15 +45,10 @@ const formatNumber = (number) => {
 
 class CombatantCompact extends React.Component {
   jobImage(job) {
-    if (window.JSFIDDLE) {
-      return window.GLOW_ICONS[job.toLowerCase()];
-    }
-
     return IMAGE_PATH + "/default/" + job.toLowerCase() + ".png";
   }
 
   render() {
-    //const width = parseInt(this.props.data.damage / this.props.encounterDamage * 100, 10) + '%';
     const width =
       Math.min(100, parseInt((this.props.total / this.props.max) * 100, 10)) +
       "%";
@@ -113,7 +110,7 @@ class Header extends React.Component {
   }
 
   shouldComponentUpdate(nextProps) {
-    // WIll need to add a null check here if we are swapping betwen self and group.
+    // Will need to add a null check here if we are swapping betwen self and group.
     // Possibly more null checks as well.
     if (nextProps.encounter.encdps === "---") {
       return false;
@@ -169,7 +166,7 @@ class Header extends React.Component {
     if (self == undefined) {
       DataSource = encounter;
     }
-    // Calculate the drect hit % based off of the combatant list. This is not efficient and needs to be removed
+    // Calculate the direct hit % based off of the combatant list. This is not efficient and needs to be removed
     // Once the encounter object is fixed to properly include this info.
     let datalength = 0;
     let DirectHitPct = 0;
@@ -211,7 +208,7 @@ class Header extends React.Component {
               className="target-name dropdown-parent"
               onClick={this.handleEncounterClick.bind(this)}
             >
-              {encounter.title}
+              {formatEncounter(encounter)}
               <div
                 className={`dropdown-menu encounters-list-dropdown ${
                   this.state.showEncountersList ? "" : "hidden"
@@ -220,21 +217,16 @@ class Header extends React.Component {
                 <div onClick={this.props.onSelectEncounter.bind(this, null)}>
                   Current Fight
                 </div>
-                {EncountersArray.map(
-                  function (encounter, i) {
-                    return (
-                      <div
-                        key={i}
-                        onClick={this.props.onSelectEncounter.bind(this, i)}
-                      >
-                        {encounter.Encounter.title}
-                      </div>
-                    );
-                  }.bind(this)
-                )}
+                {History.map((encounter, i) => (
+                  <div
+                    key={i}
+                    onClick={this.props.onSelectEncounter.bind(this, i)}
+                  >
+                    {formatEncounter(encounter.Encounter)}
+                  </div>
+                ))}
               </div>
             </span>
-            <span className="duration">({encounter.duration})</span>
             <span
               className={`arrow ${this.state.expanded ? "up" : "down"}`}
               onClick={this.handleExtraDetails.bind(this)}
@@ -372,58 +364,41 @@ class Combatants extends React.Component {
   }
 
   render() {
-    const rows = [];
     const maxRows = 12;
-    const isDataArray = _.isArray(this.props.data);
-    const dataArray = isDataArray
-      ? this.props.data
-      : Object.keys(this.props.data);
-    const limit = Math.max(dataArray.length, maxRows);
-    const names = dataArray.slice(0, maxRows - 1);
     let maxdps = false;
-    let combatant;
-    let row;
-    let isSelf;
-    let rank = 1;
-    let stats;
 
-    for (let i = 0; i < names.length; i++) {
-      combatant = isDataArray ? this.props.data[i] : this.props.data[names[i]];
-      stats = null;
+    const rows = _.take(this.props.data, maxRows)
+      .filter((combatant) => combatant.Job !== "")
+      .map((combatant, rank) => {
+        let stats;
 
-      isSelf = combatant.name === "YOU" || combatant.name === "You";
+        const isSelf = combatant.name === "YOU" || combatant.name === "You";
 
-      if (combatant.Job !== "") {
-        // should probably fix this
         if (this.props.currentView === "Healing") {
-          if (parseInt(combatant.healed, 10) > 0) {
-            if (!maxdps) {
-              maxdps = parseFloat(combatant.healed);
-            }
-            stats = {
-              job: combatant.Job || "",
-              characterName: combatant.name,
-              total: combatant.healed,
-              totalFormatted: formatNumber(combatant.healed),
-              perSecond: formatNumber(combatant.enchps),
-              additional: combatant["OverHealPct"],
-              percentage: combatant["healed%"],
-            };
+          if (!maxdps) {
+            maxdps = parseFloat(combatant.healed);
           }
+          stats = {
+            job: combatant.Job || "",
+            characterName: combatant.name,
+            total: combatant.healed,
+            totalFormatted: formatNumber(combatant.healed),
+            perSecond: formatNumber(combatant.enchps),
+            additional: combatant["OverHealPct"],
+            percentage: combatant["healed%"],
+          };
         } else if (this.props.currentView === "Tanking") {
-          if (parseInt(combatant.damagetaken, 10) > 0) {
-            if (!maxdps) {
-              maxdps = parseFloat(combatant.damagetaken);
-            }
-            stats = {
-              job: combatant.Job || "",
-              characterName: combatant.name,
-              total: combatant.damagetaken,
-              totalFormatted: formatNumber(combatant.damagetaken),
-              perSecond: combatant.ParryPct,
-              percentage: combatant.BlockPct,
-            };
+          if (!maxdps) {
+            maxdps = parseFloat(combatant.damagetaken);
           }
+          stats = {
+            job: combatant.Job || "",
+            characterName: combatant.name,
+            total: combatant.damagetaken,
+            totalFormatted: formatNumber(combatant.damagetaken),
+            perSecond: combatant.ParryPct,
+            percentage: combatant.BlockPct,
+          };
         } else {
           if (!maxdps) {
             maxdps = parseFloat(combatant.damage);
@@ -438,23 +413,19 @@ class Combatants extends React.Component {
           };
         }
 
-        if (stats) {
-          rows.push(
-            <CombatantCompact
-              onClick={this.props.onClick}
-              encounterDamage={this.props.encounterDamage}
-              rank={rank}
-              data={combatant}
-              isSelf={isSelf}
-              key={combatant.name}
-              max={maxdps}
-              {...stats}
-            />
-          );
-          rank++;
-        }
-      }
-    }
+        return (
+          <CombatantCompact
+            onClick={this.props.onClick}
+            encounterDamage={this.props.encounterDamage}
+            rank={rank + 1}
+            data={combatant}
+            isSelf={isSelf}
+            key={combatant.name}
+            max={maxdps}
+            {...stats}
+          />
+        );
+      });
 
     return <ul className="combatants">{rows}</ul>;
   }
@@ -480,10 +451,6 @@ class DamageMeter extends React.Component {
       return true;
     }
 
-    if (this.state.selectedEncounter) {
-      return false;
-    }
-
     return true;
   }
 
@@ -493,14 +460,14 @@ class DamageMeter extends React.Component {
       this.props.parseData.Encounter.title === "Encounter" &&
       nextProps.parseData.Encounter.title !== "Encounter"
     ) {
-      EncountersArray.unshift({
+      History.unshift({
         Encounter: nextProps.parseData.Encounter,
         Combatant: nextProps.parseData.Combatant,
       });
 
       // Only keep the last 10 fights
-      if (EncountersArray.length > 10) {
-        EncountersArray.pop();
+      if (History.length > 10) {
+        History.pop();
       }
     }
   }
@@ -526,14 +493,13 @@ class DamageMeter extends React.Component {
   handleSelectEncounter(index, e) {
     if (index >= 0) {
       this.setState({
-        selectedEncounter: EncountersArray[index],
+        selectedEncounter: History[index],
       });
     } else {
       this.setState({
         selectedEncounter: null,
       });
     }
-    this.render();
   }
 
   render() {
@@ -554,7 +520,6 @@ class DamageMeter extends React.Component {
       2: "damagetaken",
     }[this.state.currentViewIndex];
 
-    // Damage
     data = _.sortBy(
       _.filter(data, (d) => parseInt(d[stat]) > 0),
       (d) => -parseInt(d[stat])

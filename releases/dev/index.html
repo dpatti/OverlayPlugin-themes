@@ -7,36 +7,35 @@
     <script src="lib/react.min.js"></script>
     <script src="lib/lodash.min.js"></script>
     <script>
-        const app = document.createElement('script');
-        app.src = "lib/meters.js?_=" + Math.random();
-        app.onload = () => {
-          function onOverlayDataUpdate(e) {
-              var start = new Date().getTime();
-              var details = e.detail;
+      const app = document.createElement('script');
+      app.src = "lib/meters.js?_=" + Math.random();
+      app.onload = () => {
+        function onOverlayDataUpdate(e) {
+          var start = new Date().getTime();
+          var details = e.detail;
 
-              React.render(
-                  React.createElement(DamageMeter, {
-                      parseData: e.detail
-                  }),
-                  document.getElementById('container')
-              );
-              //console.log('rendered in ' + (+new Date() - start) + 'ms');
-          }
-          document.addEventListener('onOverlayDataUpdate', onOverlayDataUpdate);
-          document.addEventListener("onOverlayStateUpdate", function (e) {
-              if (!e.detail.isLocked) {
-          document.documentElement.classList.add("resizable");
-              } else {
-          document.documentElement.classList.remove("resizable");
-              }
-          });
-          window.addEventListener('message', function (e) {
-              if (e.data.type === 'onOverlayDataUpdate') {
-            onOverlayDataUpdate(e.data);
-              }
-          });
+          React.render(
+            React.createElement(DamageMeter, {
+              parseData: e.detail
+            }),
+            document.getElementById('container')
+          );
         }
-        document.documentElement.appendChild(app);
+        document.addEventListener('onOverlayDataUpdate', onOverlayDataUpdate);
+        document.addEventListener("onOverlayStateUpdate", function (e) {
+          if (!e.detail.isLocked) {
+            document.documentElement.classList.add("resizable");
+          } else {
+            document.documentElement.classList.remove("resizable");
+          }
+        });
+        window.addEventListener('message', function (e) {
+          if (e.data.type === 'onOverlayDataUpdate') {
+            onOverlayDataUpdate(e.data);
+          }
+        });
+      }
+      document.documentElement.appendChild(app);
     </script>
 </head>
 <body>
