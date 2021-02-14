@@ -1,4 +1,4 @@
-/* global _, OverlayPluginApi */
+/* global _ */
 const IMAGE_PATH = "images";
 const EncounterHistory = [];
 
@@ -108,7 +108,6 @@ class Header extends React.Component {
       group: true,
       showEncountersList: false,
     };
-    this.handleEndEncounter = this.handleEndEncounter.bind(this);
   }
 
   shouldComponentUpdate(nextProps) {
@@ -142,18 +141,10 @@ class Header extends React.Component {
     });
   }
 
-  handleEndEncounter() {
-    if (OverlayPluginApi != undefined) {
-      OverlayPluginApi.endEncounter();
-    }
-  }
-
   render() {
     const data = this.props.data;
     const encounter = this.props.encounter;
     const self = data["YOU"];
-
-    const rdps = parseFloat(encounter.encdps);
 
     // This is the switcher for Toggling group info or self info
     let DataSource = this.state.group ? encounter : self;
@@ -194,6 +185,12 @@ class Header extends React.Component {
       }
     }
 
+    const currentViewSummary = {
+      Damage: `Damage (${formatNumber(encounter.encdps)} dps)`,
+      Healing: `Healing (${formatNumber(encounter.enchps)} hps)`,
+      Tanking: `Damage Taken`,
+    }[this.props.currentView];
+
     return (
       <div className={`header ${this.state.expanded ? "" : "collapsed"}`}>
         <div className="encounter-header">
@@ -228,25 +225,11 @@ class Header extends React.Component {
           </div>
 
           <div
-            className="chart-view-switcher"
-            onClick={this.props.onViewChange}
-            style={{ float: "right" }}
-          >
-            {this.props.currentView}
-          </div>
-
-          <div
-            className="ff-header"
-            style={{ float: "right", paddingLeft: "1em" }}
-          >
-            rdps: {formatNumber(rdps)}
-          </div>
-          <div
-            className="ff-header"
-            onClick={this.handleEndEncounter}
+            className={`ff-header view-color ${this.props.currentView.toLowerCase()}`}
             style={{ float: "right", cursor: "pointer" }}
+            onClick={this.props.onViewChange}
           >
-            End Encounter
+            {currentViewSummary}
           </div>
         </div>
         <div className="extra-details">
