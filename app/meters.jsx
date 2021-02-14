@@ -431,7 +431,7 @@ class DamageMeter extends React.Component {
     return true;
   }
 
-  UNSAFE_componentWillReceiveProps(nextProps) {
+  componentWillReceiveProps(nextProps) {
     // save this encounter data
     if (
       this.props.parseData.Encounter.title === "Encounter" &&
