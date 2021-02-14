@@ -10,7 +10,7 @@ html {
     background-repeat: no-repeat;
 }
 
-#container {
+#app {
     font-family: "Meiryo", Tahoma;
     font-size: 12px;
     color: rgb(232, 255, 254);
@@ -318,6 +318,10 @@ li:last-child {
     left: 0px;
     padding: 2px 4px;
     z-index: 100;
+}
+
+.dropdown-menu-item {
+  padding: 4px 0;
 }
 
 .clearfix:before,

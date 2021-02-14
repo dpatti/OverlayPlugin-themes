@@ -1,6 +1,5 @@
 /* global _ */
 const IMAGE_PATH = "images";
-const EncounterHistory = [];
 
 const React = window.React;
 
@@ -205,12 +204,16 @@ class Header extends React.Component {
                   this.state.showEncountersList ? "" : "hidden"
                 }`}
               >
-                <div onClick={this.props.onSelectEncounter.bind(this, null)}>
+                <div
+                  className="dropdown-menu-item"
+                  onClick={this.props.onSelectEncounter.bind(this, null)}
+                >
                   Current Fight
                 </div>
-                {EncounterHistory.map((encounter, i) => (
+                {this.props.history.map((encounter, i) => (
                   <div
                     key={i}
+                    className="dropdown-menu-item"
                     onClick={this.props.onSelectEncounter.bind(this, i)}
                   >
                     {formatEncounter(encounter.Encounter)}
@@ -431,24 +434,6 @@ class DamageMeter extends React.Component {
     return true;
   }
 
-  componentWillReceiveProps(nextProps) {
-    // save this encounter data
-    if (
-      this.props.parseData.Encounter.title === "Encounter" &&
-      nextProps.parseData.Encounter.title !== "Encounter"
-    ) {
-      EncounterHistory.unshift({
-        Encounter: nextProps.parseData.Encounter,
-        Combatant: nextProps.parseData.Combatant,
-      });
-
-      // Only keep the last 10 fights
-      if (EncounterHistory.length > 10) {
-        EncounterHistory.pop();
-      }
-    }
-  }
-
   handleCombatRowClick() {}
 
   handleClick() {}
@@ -470,7 +455,7 @@ class DamageMeter extends React.Component {
   handleSelectEncounter(index) {
     if (index >= 0) {
       this.setState({
-        selectedEncounter: EncounterHistory[index],
+        selectedEncounter: this.props.history[index],
       });
     } else {
       this.setState({
@@ -513,6 +498,7 @@ class DamageMeter extends React.Component {
       >
         <Header
           encounter={encounterData}
+          history={this.props.history}
           data={data}
           onViewChange={this.handleViewChange.bind(this)}
           onSelectEncounter={this.handleSelectEncounter.bind(this)}
@@ -548,4 +534,80 @@ class Debugger extends React.Component {
   }
 }
 
-window.DamageMeter = DamageMeter;
+class App extends React.Component {
+  static STORAGE_KEY = "meters";
+
+  constructor(props) {
+    super(props);
+    this.state = {
+      parseData: null,
+      history: [],
+    };
+  }
+
+  componentDidMount() {
+    document.addEventListener(
+      "onOverlayDataUpdate",
+      this.onOverlayDataUpdate.bind(this)
+    );
+    document.addEventListener(
+      "onOverlayStateUpdate",
+      this.onOverlayStateUpdate.bind(this)
+    );
+
+    try {
+      const stored = JSON.parse(localStorage.getItem(App.STORAGE_KEY));
+      if (stored) {
+        this.setState({ parseData: stored[0], history: stored });
+      }
+    } catch (ex) {
+      console.error(`Couldn't load state: ${ex}`);
+    }
+  }
+
+  onOverlayStateUpdate(e) {
+    if (!e.detail.isLocked) {
+      document.documentElement.classList.add("resizable");
+    } else {
+      document.documentElement.classList.remove("resizable");
+    }
+  }
+
+  onOverlayDataUpdate(e) {
+    const parseData = e.detail;
+    let history = this.state.history;
+
+    // save this encounter data
+    if (
+      this.state.parseData &&
+      this.state.parseData.Encounter.title === "Encounter" &&
+      parseData.Encounter.title !== "Encounter"
+    ) {
+      history = [
+        {
+          Encounter: parseData.Encounter,
+          Combatant: parseData.Combatant,
+        },
+      ]
+        .concat(history)
+        .slice(0, 10);
+
+      localStorage.setItem(App.STORAGE_KEY, JSON.stringify(history));
+    }
+
+    this.setState({ parseData, history });
+  }
+
+  render() {
+    return this.state.parseData ? (
+      <DamageMeter
+        parseData={this.state.parseData}
+        history={this.state.history}
+      />
+    ) : (
+      <h3>Awaiting data.</h3>
+    );
+  }
+}
+
+window.App = App;

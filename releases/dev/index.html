@@ -10,37 +10,15 @@
       const app = document.createElement('script');
       app.src = "lib/meters.js?_=" + Math.random();
       app.onload = () => {
-        function onOverlayDataUpdate(e) {
-          var start = new Date().getTime();
-          var details = e.detail;
-
-          React.render(
-            React.createElement(DamageMeter, {
-              parseData: e.detail
-            }),
-            document.getElementById('container')
-          );
-        }
-        document.addEventListener('onOverlayDataUpdate', onOverlayDataUpdate);
-        document.addEventListener("onOverlayStateUpdate", function (e) {
-          if (!e.detail.isLocked) {
-            document.documentElement.classList.add("resizable");
-          } else {
-            document.documentElement.classList.remove("resizable");
-          }
-        });
-        window.addEventListener('message', function (e) {
-          if (e.data.type === 'onOverlayDataUpdate') {
-            onOverlayDataUpdate(e.data);
-          }
-        });
-      }
+        React.render(
+          React.createElement(App, {}),
+          document.getElementById('app')
+        );
+      };
       document.documentElement.appendChild(app);
     </script>
 </head>
 <body>
-    <div id="container">
-        <h3>Awaiting data.</h3>
-    </div>
+    <div id="app"></div>
 </body>
 </html>
