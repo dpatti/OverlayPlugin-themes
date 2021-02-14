@@ -191,7 +191,11 @@ class Header extends React.Component {
     }[this.props.currentView];
 
     return (
-      <div className={`header ${this.state.expanded ? "" : "collapsed"}`}>
+      <div
+        className={`header view-color ${this.props.currentView.toLowerCase()} ${
+          this.state.expanded ? "" : "collapsed"
+        }`}
+      >
         <div className="encounter-header">
           <div className="encounter-data ff-header">
             <span
@@ -228,7 +232,7 @@ class Header extends React.Component {
           </div>
 
           <div
-            className={`ff-header view-color ${this.props.currentView.toLowerCase()}`}
+            className={`ff-header`}
             style={{ float: "right", cursor: "pointer" }}
             onClick={this.props.onViewChange}
           >

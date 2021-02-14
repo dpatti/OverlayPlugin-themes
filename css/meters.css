@@ -84,13 +84,13 @@ ul {
 }
 
 .view-color.damage {
-    border-bottom: 3px solid #2a81d7;
+    border-top: 3px solid #2a81d7;
 }
 .view-color.healing {
-    border-bottom: 3px solid #039158;
+    border-top: 3px solid #039158;
 }
 .view-color.tanking {
-    border-bottom: 3px solid #ca5e4e;
+    border-top: 3px solid #ca5e4e;
 }
 
 .data-set-view-switcher{
