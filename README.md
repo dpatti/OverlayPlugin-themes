@@ -1,6 +1,6 @@
 ## Releases
 
-### dev
+### v2
 
 [URL](https://dpatti.github.io/ffxiv-overlay/releases/dev/)
 
@@ -33,3 +33,7 @@ and
 ```
 cd releases/dev && python -m http.server
 ```
+
+- [ ] Update react and lodash, bundle to one file
+- [ ] Add Limit Break as participant
+- [ ] Do something about the stats pane
