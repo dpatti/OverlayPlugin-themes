@@ -1,5 +1,7 @@
 /* global _ */
 const IMAGE_PATH = "images";
+const LIMIT_BREAK = "Limit Break";
+const YOU = "YOU";
 
 const React = window.React;
 
@@ -17,12 +19,12 @@ const options = ((search) => {
   }
 
   return {
-    you: options.you || "YOU",
+    you: options.you || YOU,
   };
 })(document.location.search);
 
 const formatName = (name) => {
-  if (name == "YOU") {
+  if (name == YOU) {
     return options.you.replace(/_/g, " ");
   } else {
     return name;
@@ -48,10 +50,6 @@ class CombatantCompact extends React.Component {
     onClick() {},
   };
 
-  jobImage(job) {
-    return IMAGE_PATH + "/default/" + job.toLowerCase() + ".png";
-  }
-
   render() {
     const width =
       Math.min(100, parseInt((this.props.total / this.props.max) * 100, 10)) +
@@ -60,9 +58,7 @@ class CombatantCompact extends React.Component {
     return this.props.perSecond === "---" ? null : (
       <li
         className={
-          "row " +
-          this.props.job.toLowerCase() +
-          (this.props.isSelf ? " self" : "")
+          "row " + this.props.actor + (this.props.isSelf ? " self" : "")
         }
         onClick={this.props.onClick}
       >
@@ -77,9 +73,7 @@ class CombatantCompact extends React.Component {
             <span className="percent">{this.props.percentage}</span>)
           </div>
           <div className="info">
-            <span className="job-icon">
-              <img src={this.jobImage(this.props.job)} />
-            </span>
+            <span className="job-icon"></span>
             <span className="rank">{this.props.rank}.</span>
             <span className="character-name">
               {formatName(this.props.characterName)}
@@ -143,7 +137,7 @@ class Header extends React.Component {
   render() {
     const data = this.props.data;
     const encounter = this.props.encounter;
-    const self = data["YOU"];
+    const self = data[YOU];
 
     // This is the switcher for Toggling group info or self info
     let DataSource = this.state.group ? encounter : self;
@@ -348,65 +342,68 @@ class Combatants extends React.Component {
     const maxRows = 12;
     let maxdps = false;
 
-    const rows = _.take(this.props.data, maxRows)
-      .filter((combatant) => combatant.Job !== "")
-      .map((combatant, rank) => {
-        let stats;
+    const rows = _.take(this.props.data, maxRows).map((combatant, rank) => {
+      let stats;
 
-        const isSelf = combatant.name === "YOU" || combatant.name === "You";
+      const isSelf = combatant.name === YOU || combatant.name === "You";
+      const actor =
+        combatant.name === LIMIT_BREAK ? "lb" : combatant.Job.toLowerCase();
 
-        if (this.props.currentView === "Healing") {
-          if (!maxdps) {
-            maxdps = parseFloat(combatant.healed);
-          }
-          stats = {
-            job: combatant.Job || "",
-            characterName: combatant.name,
-            total: combatant.healed,
-            totalFormatted: formatNumber(combatant.healed),
-            perSecond: formatNumber(combatant.enchps),
-            additional: combatant["OverHealPct"],
-            percentage: combatant["healed%"],
-          };
-        } else if (this.props.currentView === "Tanking") {
-          if (!maxdps) {
-            maxdps = parseFloat(combatant.damagetaken);
-          }
-          stats = {
-            job: combatant.Job || "",
-            characterName: combatant.name,
-            total: combatant.damagetaken,
-            totalFormatted: formatNumber(combatant.damagetaken),
-            perSecond: combatant.ParryPct,
-            percentage: combatant.BlockPct,
-          };
-        } else {
-          if (!maxdps) {
-            maxdps = parseFloat(combatant.damage);
-          }
-          stats = {
-            job: combatant.Job || "",
-            characterName: combatant.name,
-            total: combatant.damage,
-            totalFormatted: formatNumber(combatant.damage),
-            perSecond: formatNumber(combatant.encdps),
-            percentage: combatant["damage%"],
-          };
+      if (this.props.currentView === "Healing") {
+        if (!maxdps) {
+          maxdps = parseFloat(combatant.healed);
         }
+        stats = {
+          actor,
+          job: combatant.Job || "",
+          characterName: combatant.name,
+          total: combatant.healed,
+          totalFormatted: formatNumber(combatant.healed),
+          perSecond: formatNumber(combatant.enchps),
+          additional: combatant["OverHealPct"],
+          percentage: combatant["healed%"],
+        };
+      } else if (this.props.currentView === "Tanking") {
+        if (!maxdps) {
+          maxdps = parseFloat(combatant.damagetaken);
+        }
+        stats = {
+          actor,
+          job: combatant.Job || "",
+          characterName: combatant.name,
+          total: combatant.damagetaken,
+          totalFormatted: formatNumber(combatant.damagetaken),
+          perSecond: combatant.ParryPct,
+          percentage: combatant.BlockPct,
+        };
+      } else {
+        if (!maxdps) {
+          maxdps = parseFloat(combatant.damage);
+        }
+        stats = {
+          actor,
+          job: combatant.Job || "",
+          characterName: combatant.name,
+          total: combatant.damage,
+          totalFormatted: formatNumber(combatant.damage),
+          perSecond: formatNumber(combatant.encdps),
+          percentage: combatant["damage%"],
+        };
+      }
 
-        return (
-          <CombatantCompact
-            onClick={this.props.onClick}
-            encounterDamage={this.props.encounterDamage}
-            rank={rank + 1}
-            data={combatant}
-            isSelf={isSelf}
-            key={combatant.name}
-            max={maxdps}
-            {...stats}
-          />
-        );
-      });
+      return (
+        <CombatantCompact
+          onClick={this.props.onClick}
+          encounterDamage={this.props.encounterDamage}
+          rank={rank + 1}
+          data={combatant}
+          isSelf={isSelf}
+          key={combatant.name}
+          max={maxdps}
+          {...stats}
+        />
+      );
+    });
 
     return <ul className="combatants">{rows}</ul>;
   }
