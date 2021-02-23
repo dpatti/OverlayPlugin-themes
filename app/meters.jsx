@@ -111,7 +111,7 @@ class Header extends React.Component {
     return true;
   }
 
-  handleExtraDetails(e) {
+  toggleExtraDetails(e) {
     this.props.onExtraDetailsClick(e);
 
     this.setState({
@@ -120,17 +120,22 @@ class Header extends React.Component {
   }
 
   // Show dropdown for list of encounters
-  handleEncounterClick() {
+  toggleEncounterMenu() {
     this.setState({
       showEncountersList: !this.state.showEncountersList,
     });
   }
 
   // Toggle between group and indidivual stats.
-  handleToggleStats() {
+  toggleStats() {
     this.setState({
       group: !this.state.group,
     });
+  }
+
+  onSelectEncounter(index) {
+    this.setState({ showEncountersList: false });
+    this.props.onSelectEncounter(index);
   }
 
   render() {
@@ -193,39 +198,39 @@ class Header extends React.Component {
           <div className="encounter-data ff-header">
             <span
               className="target-name dropdown-parent"
-              onClick={this.handleEncounterClick.bind(this)}
+              onClick={this.toggleEncounterMenu.bind(this)}
             >
               {formatEncounter(encounter)}
-              <div
-                className={`dropdown-menu encounters-list-dropdown ${
-                  this.state.showEncountersList ? "" : "hidden"
-                }`}
-              >
-                <div
-                  className="dropdown-menu-item"
-                  onClick={this.props.onSelectEncounter.bind(this, null)}
-                >
-                  Current Fight
-                </div>
-                {this.props.history.map((encounter, i) => (
-                  <div
-                    key={i}
-                    className="dropdown-menu-item"
-                    onClick={this.props.onSelectEncounter.bind(this, i)}
-                  >
-                    {formatEncounter(encounter.Encounter)}
-                  </div>
-                ))}
-              </div>
             </span>
+            <div
+              className={`dropdown-menu encounters-list-dropdown ${
+                this.state.showEncountersList ? "" : "hidden"
+              }`}
+            >
+              <div
+                className="dropdown-menu-item target-name"
+                onClick={() => this.onSelectEncounter(null)}
+              >
+                Current Fight
+              </div>
+              {this.props.history.map((encounter, i) => (
+                <div
+                  key={i}
+                  className="dropdown-menu-item target-name"
+                  onClick={() => this.onSelectEncounter(i)}
+                >
+                  {formatEncounter(encounter.Encounter)}
+                </div>
+              ))}
+            </div>
             <span
               className={`arrow ${this.state.expanded ? "up" : "down"}`}
-              onClick={this.handleExtraDetails.bind(this)}
+              onClick={this.toggleExtraDetails.bind(this)}
             />
           </div>
 
           <div
-            className={`ff-header`}
+            className={`ff-header target-name`}
             style={{ float: "right", cursor: "pointer" }}
             onClick={this.props.onViewChange}
           >
@@ -236,7 +241,7 @@ class Header extends React.Component {
           {this.props.currentView == "Damage" ? (
             <div
               className="data-set-view-switcher clearfix"
-              onClick={this.handleToggleStats.bind(this)}
+              onClick={this.toggleStats.bind(this)}
             >
               <span
                 className={`data-set-option ${
