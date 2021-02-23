@@ -50,6 +50,7 @@ ul {
 .view-color.damage  { --view-color: #2a81d7; }
 .view-color.healing { --view-color: #039158; }
 .view-color.tanking { --view-color: #ca5e4e; }
+.view-color.deaths  { --view-color: #9d807b; }
 
 .encounter-header {
     display:block;

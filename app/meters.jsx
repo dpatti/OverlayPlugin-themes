@@ -2,6 +2,13 @@
 const LIMIT_BREAK = "Limit Break";
 const YOU = "YOU";
 
+const View = {
+  Damage: "Damage",
+  Healing: "Healing",
+  Tanking: "Tanking",
+  Deaths: "Deaths",
+};
+
 const React = window.React;
 
 const options = ((search) => {
@@ -39,6 +46,9 @@ const formatNumber = (number) => {
     return (number / 1000000).toFixed(2) + "M";
   } else if (number >= 1000) {
     return (number / 1000).toFixed(2) + "K";
+  } else if (number % 1 == 0) {
+    // A bit of a hack for deaths so that they don't show as 1.00
+    return number;
   }
 
   return number.toFixed(2);
@@ -64,12 +74,13 @@ class CombatantCompact extends React.Component {
         <div className="bar" style={{ width: width }} />
         <div className="text-overlay">
           <div className="stats">
-            <span className="total">{this.props.totalFormatted}</span>
+            <span className="total">{formatNumber(this.props.total)}</span>
             {this.props.additional ? (
               <span className="additional">[{this.props.additional}]</span>
             ) : null}
-            (<span className="ps">{this.props.perSecond},</span>
-            <span className="percent">{this.props.percentage}</span>)
+            {this.props.perSecond !== null
+              ? `(${this.props.perSecond}, ${this.props.percentage})`
+              : null}
           </div>
           <div className="info">
             <span className="job-icon"></span>
@@ -183,9 +194,10 @@ class Header extends React.Component {
     }
 
     const currentViewSummary = {
-      Damage: `Damage (${formatNumber(encounter.encdps)} dps)`,
-      Healing: `Healing (${formatNumber(encounter.enchps)} hps)`,
-      Tanking: `Damage Taken`,
+      [View.Damage]: `Damage (${formatNumber(encounter.encdps)} dps)`,
+      [View.Healing]: `Healing (${formatNumber(encounter.enchps)} hps)`,
+      [View.Tanking]: `Damage Taken`,
+      [View.Deaths]: `Deaths (${encounter.deaths} total)`,
     }[this.props.currentView];
 
     return (
@@ -238,7 +250,7 @@ class Header extends React.Component {
           </div>
         </div>
         <div className="extra-details">
-          {this.props.currentView == "Damage" ? (
+          {this.props.currentView == View.Damage ? (
             <div
               className="data-set-view-switcher clearfix"
               onClick={this.toggleStats.bind(this)}
@@ -344,66 +356,54 @@ class Combatants extends React.Component {
 
   render() {
     const maxRows = 12;
-    let maxdps = false;
+    let max;
 
     const rows = _.take(this.props.data, maxRows).map((combatant, rank) => {
-      let stats;
-
       const isSelf = combatant.name === YOU || combatant.name === "You";
       const actor =
         combatant.name === LIMIT_BREAK ? "lb" : combatant.Job.toLowerCase();
 
-      if (this.props.currentView === "Healing") {
-        if (!maxdps) {
-          maxdps = parseFloat(combatant.healed);
-        }
-        stats = {
+      const stats = _.merge(
+        {
           actor,
           job: combatant.Job || "",
           characterName: combatant.name,
-          total: combatant.healed,
-          totalFormatted: formatNumber(combatant.healed),
-          perSecond: formatNumber(combatant.enchps),
-          additional: combatant["OverHealPct"],
-          percentage: combatant["healed%"],
-        };
-      } else if (this.props.currentView === "Tanking") {
-        if (!maxdps) {
-          maxdps = parseFloat(combatant.damagetaken);
-        }
-        stats = {
-          actor,
-          job: combatant.Job || "",
-          characterName: combatant.name,
-          total: combatant.damagetaken,
-          totalFormatted: formatNumber(combatant.damagetaken),
-          perSecond: combatant.ParryPct,
-          percentage: combatant.BlockPct,
-        };
-      } else {
-        if (!maxdps) {
-          maxdps = parseFloat(combatant.damage);
-        }
-        stats = {
-          actor,
-          job: combatant.Job || "",
-          characterName: combatant.name,
-          total: combatant.damage,
-          totalFormatted: formatNumber(combatant.damage),
-          perSecond: formatNumber(combatant.encdps),
-          percentage: combatant["damage%"],
-        };
-      }
+        },
+        {
+          [View.Damage]: {
+            total: combatant.damage,
+            perSecond: formatNumber(combatant.encdps),
+            percentage: combatant["damage%"],
+          },
+          [View.Healing]: {
+            total: combatant.healed,
+            additional: combatant["OverHealPct"],
+            perSecond: formatNumber(combatant.enchps),
+            percentage: combatant["healed%"],
+          },
+          [View.Tanking]: {
+            total: combatant.damagetaken,
+            perSecond: combatant.ParryPct,
+            percentage: combatant.BlockPct,
+          },
+          [View.Deaths]: {
+            total: combatant.deaths,
+            perSecond: null,
+            percentage: null,
+          },
+        }[this.props.currentView]
+      );
+
+      max = max || stats.total;
 
       return (
         <CombatantCompact
           onClick={this.props.onClick}
-          encounterDamage={this.props.encounterDamage}
           rank={rank + 1}
           data={combatant}
           isSelf={isSelf}
           key={combatant.name}
-          max={maxdps}
+          max={max}
           {...stats}
         />
       );
@@ -415,7 +415,6 @@ class Combatants extends React.Component {
 
 class DamageMeter extends React.Component {
   static defaultProps = {
-    chartViews: ["Damage", "Healing", "Tanking"],
     parseData: {},
     noJobColors: false,
   };
@@ -423,7 +422,7 @@ class DamageMeter extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
-      currentViewIndex: 0,
+      currentView: View.Damage,
     };
   }
 
@@ -432,7 +431,7 @@ class DamageMeter extends React.Component {
       return false;
     }
 
-    if (this.state.currentViewIndex !== nextState.currentViewIndex) {
+    if (this.state.currentView !== nextState.currentView) {
       return true;
     }
 
@@ -442,16 +441,11 @@ class DamageMeter extends React.Component {
   handleCombatRowClick() {}
 
   handleViewChange() {
-    let index = this.state.currentViewIndex;
-
-    if (index > this.props.chartViews.length - 2) {
-      index = 0;
-    } else {
-      index++;
-    }
+    const views = Object.keys(View);
+    const index = views.indexOf(this.state.currentView);
 
     this.setState({
-      currentViewIndex: index,
+      currentView: views[(index + 1) % views.length],
     });
   }
 
@@ -468,10 +462,11 @@ class DamageMeter extends React.Component {
     }
 
     const stat = {
-      0: "damage",
-      1: "healed",
-      2: "damagetaken",
-    }[this.state.currentViewIndex];
+      [View.Damage]: "damage",
+      [View.Healing]: "healed",
+      [View.Tanking]: "damagetaken",
+      [View.Deaths]: "deaths",
+    }[this.state.currentView];
 
     data = _.sortBy(
       _.filter(data, (d) => parseInt(d[stat]) > 0),
@@ -486,13 +481,12 @@ class DamageMeter extends React.Component {
           data={data}
           onViewChange={this.handleViewChange.bind(this)}
           onSelectEncounter={this.props.onSelectEncounter}
-          currentView={this.props.chartViews[this.state.currentViewIndex]}
+          currentView={this.state.currentView}
         />
         <Combatants
-          currentView={this.props.chartViews[this.state.currentViewIndex]}
+          currentView={this.state.currentView}
           onClick={this.handleCombatRowClick}
           data={data}
-          encounterDamage={encounterData.damage}
         />
         {!debug ? null : (
           <div>
