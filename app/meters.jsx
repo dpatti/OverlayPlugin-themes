@@ -89,12 +89,88 @@ class CombatantCompact extends React.Component {
   }
 }
 
+class Stat extends React.Component {
+  render() {
+    return this.props.value ? (
+      <div className="cell">
+        <span className="label ff-header">{this.props.label}</span>
+        <span className="value ff-text">{this.props.value}</span>
+      </div>
+    ) : null;
+  }
+}
+
+class Stats extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      group: true,
+    };
+  }
+
+  toggleSource(value = !this.state.group) {
+    this.setState({
+      group: value,
+    });
+  }
+
+  render() {
+    const self = this.props.self;
+    const dataSource = this.state.group || !self ? this.props.encounter : self;
+
+    const ifSelf = (x) => (!this.state.group ? x : null);
+
+    return (
+      <div className="extra-details">
+        <div
+          className="data-set-view-switcher clearfix"
+          onClick={() => this.toggleSource()}
+        >
+          <span
+            className={`data-set-option ${this.state.group ? "active" : ""}`}
+          >
+            G
+          </span>
+          <span
+            className={`data-set-option ${!this.state.group ? "active" : ""}`}
+          >
+            I
+          </span>
+        </div>
+        <div className="extra-row damage">
+          <Stat
+            label="Damage"
+            value={`${formatNumber(dataSource.damage)} (${formatNumber(
+              dataSource.encdps
+            )})`}
+          />
+          <Stat label="Max" value={dataSource.maxhit} />
+          {/* These can be grouped with React.Fragment if react is upgraded */}
+          {ifSelf(<Stat label="Crit%" value={self?.["crithit%"]} />)}
+          {ifSelf(<Stat label="Direct%" value={self?.DirectHitPct} />)}
+          {ifSelf(<Stat label="DirectCrit%" value={self?.CritDirectHitPct} />)}
+        </div>
+        <hr />
+        <div className="extra-row healing">
+          <Stat
+            label="Heals"
+            value={`${formatNumber(dataSource.healed)} (${formatNumber(
+              dataSource.enchps
+            )})`}
+          />
+          <Stat label="Max" value={dataSource.maxheal} />
+          {ifSelf(<Stat label="Crit%" value={self?.["critheal%"]} />)}
+        </div>
+      </div>
+    );
+  }
+}
+
 class Header extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
       expanded: false,
-      group: true,
       showEncountersList: false,
     };
   }
@@ -108,9 +184,9 @@ class Header extends React.Component {
     return true;
   }
 
-  toggleExtraDetails() {
+  toggleStats(value = !this.state.expanded) {
     this.setState({
-      expanded: !this.state.expanded,
+      expanded: value,
     });
   }
 
@@ -121,63 +197,13 @@ class Header extends React.Component {
     });
   }
 
-  // Toggle between group and indidivual stats.
-  toggleStats(value = !this.state.group) {
-    this.setState({
-      group: value,
-    });
-  }
-
   onSelectEncounter(index) {
     this.toggleEncounterMenu(false);
     this.props.onSelectEncounter(index);
   }
 
   render() {
-    const combatants = this.props.combatants;
     const encounter = this.props.encounter;
-    const self = combatants[YOU];
-
-    // This is the switcher for Toggling group info or self info
-    let DataSource = this.state.group ? encounter : self;
-    if (self == undefined) {
-      DataSource = encounter;
-    }
-    // Calculate the direct hit % based off of the combatant list
-    let datalength = 0;
-    let DirectHitPct = 0;
-    let CritDirectHitPct = 0;
-    if (this.state.group) {
-      if (combatants !== undefined) {
-        for (let x in combatants) {
-          if (!Object.prototype.hasOwnProperty.call(combatants, x)) continue;
-          DirectHitPct += parseFloat(
-            combatants[x].DirectHitPct.substring(
-              0,
-              combatants[x].DirectHitPct.length - 1
-            )
-          );
-          CritDirectHitPct += parseFloat(
-            combatants[x].CritDirectHitPct.substring(
-              0,
-              combatants[x].CritDirectHitPct.length - 1
-            )
-          );
-          datalength++;
-        }
-        if (DirectHitPct > 0) {
-          DirectHitPct = parseFloat(DirectHitPct / datalength);
-        }
-        if (CritDirectHitPct > 0) {
-          CritDirectHitPct = parseFloat(CritDirectHitPct / datalength);
-        }
-      }
-    } else {
-      if (self != undefined) {
-        DirectHitPct = self.DirectHitPct;
-        CritDirectHitPct = self.CritDirectHitPct;
-      }
-    }
 
     const currentViewSummary = {
       [View.Damage]: `Damage (${formatNumber(encounter.encdps)} dps)`,
@@ -188,9 +214,7 @@ class Header extends React.Component {
 
     return (
       <div
-        className={`header view-color ${this.props.currentView.toLowerCase()} ${
-          this.state.expanded ? "" : "collapsed"
-        }`}
+        className={`header view-color ${this.props.currentView.toLowerCase()}`}
       >
         <div className="encounter-header">
           <div className="encounter-data ff-header">
@@ -223,10 +247,9 @@ class Header extends React.Component {
             </div>
             <span
               className={`arrow ${this.state.expanded ? "up" : "down"}`}
-              onClick={() => this.toggleExtraDetails()}
+              onClick={() => this.toggleStats()}
             />
           </div>
-
           <div
             className={`ff-header header-right target-name`}
             onClick={this.props.onViewChange}
@@ -234,92 +257,9 @@ class Header extends React.Component {
             {currentViewSummary}
           </div>
         </div>
-        <div className="extra-details">
-          {this.props.currentView == View.Damage ? (
-            <div
-              className="data-set-view-switcher clearfix"
-              onClick={() => this.toggleStats()}
-            >
-              <span
-                className={`data-set-option ${
-                  this.state.group ? "active" : ""
-                }`}
-              >
-                G
-              </span>
-              <span
-                className={`data-set-option ${
-                  !this.state.group ? "active" : ""
-                }`}
-              >
-                I
-              </span>
-            </div>
-          ) : null}
-          <div className="extra-row damage">
-            <div className="cell">
-              <span className="label ff-header">Damage</span>
-              <span className="value ff-text">
-                {`${formatNumber(DataSource.damage)} (${formatNumber(
-                  DataSource.encdps
-                )})`}
-              </span>
-            </div>
-
-            <div className="cell">
-              <span className="label ff-header">Max</span>
-              <span className="value ff-text">{DataSource.maxhit}</span>
-            </div>
-          </div>
-          <div className="extra-row damage">
-            {/* crithit is not being calculated properly in the Encounter object so instead we are calcing it on the fly*/}
-            <div className="cell">
-              <span className="label ff-header">Crit%</span>
-              <span className="value ff-text">
-                {formatNumber(
-                  parseFloat((DataSource.crithits / DataSource.hits) * 100)
-                ) + "%"}
-              </span>
-            </div>
-            <div className="cell">
-              <span className="label ff-header">Misses</span>
-              <span className="value ff-text">{encounter.misses}</span>
-            </div>
-            {/* DirectHitPct coming from the Encounter object is missing so we are calcing above */}
-            <div className="cell">
-              <span className="label ff-header">Direct%</span>
-              <span className="value ff-text">
-                {formatNumber(DirectHitPct) + "%"}
-              </span>
-            </div>
-            {/* CritDirectHitPct coming from the Encounter object is missing so we are calcing above */}
-            <div className="cell">
-              <span className="label ff-header">DirectCrit%</span>
-              <span className="value ff-text">
-                {formatNumber(CritDirectHitPct) + "%"}
-              </span>
-            </div>
-          </div>
-          <div className="extra-row healing">
-            <div className="cell">
-              <span className="label ff-header">Heals</span>
-              <span className="value ff-text">
-                {`${formatNumber(DataSource.healed)} (${formatNumber(
-                  DataSource.enchps
-                )})`}
-              </span>
-            </div>
-            {/* Overlay plugin is not returning correct heal values  */}
-            <div className="cell">
-              <span className="label ff-header">Crit%</span>
-              <span className="value ff-text">{DataSource["critheal%"]}</span>
-            </div>
-            <div className="cell">
-              <span className="label ff-header">Max</span>
-              <span className="value ff-text">{DataSource.maxheal}</span>
-            </div>
-          </div>
-        </div>
+        {this.state.expanded ? (
+          <Stats encounter={this.props.encounter} self={this.props.self} />
+        ) : null}
       </div>
     );
   }
@@ -436,6 +376,8 @@ class DamageMeter extends React.Component {
       [View.Deaths]: "deaths",
     }[this.state.currentView];
 
+    const self = encounter.Combatant.YOU;
+
     const combatants = _.sortBy(
       _.filter(encounter.Combatant, (d) => parseInt(d[stat]) > 0),
       (d) => -parseInt(d[stat])
@@ -446,7 +388,7 @@ class DamageMeter extends React.Component {
         <Header
           encounter={encounter.Encounter}
           history={this.props.history}
-          combatants={combatants}
+          self={self}
           onViewChange={() => this.handleViewChange()}
           onSelectEncounter={this.props.onSelectEncounter}
           currentView={this.state.currentView}

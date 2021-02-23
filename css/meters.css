@@ -74,10 +74,8 @@ ul {
 .extra-details {
     padding: 2px 6px 6px 10px;
 }
-.collapsed .extra-details {
-    display: none;
-}
 .extra-row {
+    margin-top:0.5em;
     display: flex;
     justify-content: flex-start;
     flex-wrap: wrap;
