@@ -1,4 +1,6 @@
-/* global _ */
+const _ = window._;
+const React = window.React;
+
 const LIMIT_BREAK = "Limit Break";
 const YOU = "YOU";
 
@@ -9,15 +11,13 @@ const View = {
   Deaths: "Deaths",
 };
 
-const React = window.React;
-
 const options = ((search) => {
   let options = {};
 
   if (search[0] === "?") {
     search
       .slice(1)
-      .split(",")
+      .split("&")
       .map((pair) => pair.split("="))
       .forEach(([k, v]) => {
         options[k] = v;
@@ -26,6 +26,7 @@ const options = ((search) => {
 
   return {
     you: options.you || YOU,
+    debug: "debug" in options || false,
   };
 })(document.location.search);
 
@@ -40,7 +41,7 @@ const formatName = (name) => {
 const formatEncounter = (enc) => `${enc.title} (${enc.duration})`;
 
 const formatNumber = (number) => {
-  number = parseFloat(number, 10);
+  number = parseFloat(number);
 
   if (number >= 1000000) {
     return (number / 1000000).toFixed(2) + "M";
@@ -55,21 +56,13 @@ const formatNumber = (number) => {
 };
 
 class CombatantCompact extends React.Component {
-  static defaultProps = {
-    onClick() {},
-  };
-
   render() {
     const width =
-      Math.min(100, parseInt((this.props.total / this.props.max) * 100, 10)) +
-      "%";
+      Math.min(100, parseInt((this.props.total / this.props.max) * 100)) + "%";
 
     return this.props.perSecond === "---" ? null : (
       <li
-        className={
-          "row " + this.props.actor + (this.props.isSelf ? " self" : "")
-        }
-        onClick={this.props.onClick}
+        className={`row ${this.props.actor} ${this.props.isSelf ? "self" : ""}`}
       >
         <div className="bar" style={{ width: width }} />
         <div className="text-overlay">
@@ -97,13 +90,6 @@ class CombatantCompact extends React.Component {
 }
 
 class Header extends React.Component {
-  static defaultProps = {
-    encounter: {},
-    onViewChange() {},
-    onSelectEncounter() {},
-    onExtraDetailsClick() {},
-  };
-
   constructor(props) {
     super(props);
     this.state = {
@@ -114,67 +100,67 @@ class Header extends React.Component {
   }
 
   shouldComponentUpdate(nextProps) {
-    // Will need to add a null check here if we are swapping betwen self and group.
-    // Possibly more null checks as well.
+    // Will need to add a null check here if we are swapping betwen self and
+    // group. Possibly more null checks as well.
     if (nextProps.encounter.encdps === "---") {
       return false;
     }
     return true;
   }
 
-  toggleExtraDetails(e) {
-    this.props.onExtraDetailsClick(e);
-
+  toggleExtraDetails() {
     this.setState({
       expanded: !this.state.expanded,
     });
   }
 
   // Show dropdown for list of encounters
-  toggleEncounterMenu() {
+  toggleEncounterMenu(value = !this.state.showEncountersList) {
     this.setState({
-      showEncountersList: !this.state.showEncountersList,
+      showEncountersList: value,
     });
   }
 
   // Toggle between group and indidivual stats.
-  toggleStats() {
+  toggleStats(value = !this.state.group) {
     this.setState({
-      group: !this.state.group,
+      group: value,
     });
   }
 
   onSelectEncounter(index) {
-    this.setState({ showEncountersList: false });
+    this.toggleEncounterMenu(false);
     this.props.onSelectEncounter(index);
   }
 
   render() {
-    const data = this.props.data;
+    const combatants = this.props.combatants;
     const encounter = this.props.encounter;
-    const self = data[YOU];
+    const self = combatants[YOU];
 
     // This is the switcher for Toggling group info or self info
     let DataSource = this.state.group ? encounter : self;
     if (self == undefined) {
       DataSource = encounter;
     }
-    // Calculate the direct hit % based off of the combatant list. This is not efficient and needs to be removed
-    // Once the encounter object is fixed to properly include this info.
+    // Calculate the direct hit % based off of the combatant list
     let datalength = 0;
     let DirectHitPct = 0;
     let CritDirectHitPct = 0;
     if (this.state.group) {
-      if (data !== undefined) {
-        for (let x in data) {
-          if (!Object.prototype.hasOwnProperty.call(data, x)) continue;
+      if (combatants !== undefined) {
+        for (let x in combatants) {
+          if (!Object.prototype.hasOwnProperty.call(combatants, x)) continue;
           DirectHitPct += parseFloat(
-            data[x].DirectHitPct.substring(0, data[x].DirectHitPct.length - 1)
+            combatants[x].DirectHitPct.substring(
+              0,
+              combatants[x].DirectHitPct.length - 1
+            )
           );
           CritDirectHitPct += parseFloat(
-            data[x].CritDirectHitPct.substring(
+            combatants[x].CritDirectHitPct.substring(
               0,
-              data[x].CritDirectHitPct.length - 1
+              combatants[x].CritDirectHitPct.length - 1
             )
           );
           datalength++;
@@ -210,7 +196,7 @@ class Header extends React.Component {
           <div className="encounter-data ff-header">
             <span
               className="target-name dropdown-parent"
-              onClick={this.toggleEncounterMenu.bind(this)}
+              onClick={() => this.toggleEncounterMenu()}
             >
               {formatEncounter(encounter)}
             </span>
@@ -237,13 +223,12 @@ class Header extends React.Component {
             </div>
             <span
               className={`arrow ${this.state.expanded ? "up" : "down"}`}
-              onClick={this.toggleExtraDetails.bind(this)}
+              onClick={() => this.toggleExtraDetails()}
             />
           </div>
 
           <div
-            className={`ff-header target-name`}
-            style={{ float: "right", cursor: "pointer" }}
+            className={`ff-header header-right target-name`}
             onClick={this.props.onViewChange}
           >
             {currentViewSummary}
@@ -253,7 +238,7 @@ class Header extends React.Component {
           {this.props.currentView == View.Damage ? (
             <div
               className="data-set-view-switcher clearfix"
-              onClick={this.toggleStats.bind(this)}
+              onClick={() => this.toggleStats()}
             >
               <span
                 className={`data-set-option ${
@@ -341,13 +326,9 @@ class Header extends React.Component {
 }
 
 class Combatants extends React.Component {
-  static defaultProps = {
-    onClick() {},
-  };
-
   shouldComponentUpdate(nextProps) {
     // if data is empty then don't re-render
-    if (Object.getOwnPropertyNames(nextProps.data).length === 0) {
+    if (Object.getOwnPropertyNames(nextProps.combatants).length === 0) {
       return false;
     }
 
@@ -358,67 +339,63 @@ class Combatants extends React.Component {
     const maxRows = 12;
     let max;
 
-    const rows = _.take(this.props.data, maxRows).map((combatant, rank) => {
-      const isSelf = combatant.name === YOU || combatant.name === "You";
-      const actor =
-        combatant.name === LIMIT_BREAK ? "lb" : combatant.Job.toLowerCase();
+    const rows = _.take(this.props.combatants, maxRows).map(
+      (combatant, rank) => {
+        const isSelf = combatant.name === YOU || combatant.name === "You";
+        const actor =
+          combatant.name === LIMIT_BREAK ? "lb" : combatant.Job.toLowerCase();
 
-      const stats = _.merge(
-        {
-          actor,
-          job: combatant.Job || "",
-          characterName: combatant.name,
-        },
-        {
-          [View.Damage]: {
-            total: combatant.damage,
-            perSecond: formatNumber(combatant.encdps),
-            percentage: combatant["damage%"],
+        const stats = _.merge(
+          {
+            actor,
+            job: combatant.Job || "",
+            characterName: combatant.name,
           },
-          [View.Healing]: {
-            total: combatant.healed,
-            additional: combatant["OverHealPct"],
-            perSecond: formatNumber(combatant.enchps),
-            percentage: combatant["healed%"],
-          },
-          [View.Tanking]: {
-            total: combatant.damagetaken,
-            perSecond: combatant.ParryPct,
-            percentage: combatant.BlockPct,
-          },
-          [View.Deaths]: {
-            total: combatant.deaths,
-            perSecond: null,
-            percentage: null,
-          },
-        }[this.props.currentView]
-      );
+          {
+            [View.Damage]: {
+              total: combatant.damage,
+              perSecond: formatNumber(combatant.encdps),
+              percentage: combatant["damage%"],
+            },
+            [View.Healing]: {
+              total: combatant.healed,
+              additional: combatant["OverHealPct"],
+              perSecond: formatNumber(combatant.enchps),
+              percentage: combatant["healed%"],
+            },
+            [View.Tanking]: {
+              total: combatant.damagetaken,
+              perSecond: combatant.ParryPct,
+              percentage: combatant.BlockPct,
+            },
+            [View.Deaths]: {
+              total: combatant.deaths,
+              perSecond: null,
+              percentage: null,
+            },
+          }[this.props.currentView]
+        );
 
-      max = max || stats.total;
+        max = max || stats.total;
 
-      return (
-        <CombatantCompact
-          onClick={this.props.onClick}
-          rank={rank + 1}
-          data={combatant}
-          isSelf={isSelf}
-          key={combatant.name}
-          max={max}
-          {...stats}
-        />
-      );
-    });
+        return (
+          <CombatantCompact
+            rank={rank + 1}
+            data={combatant}
+            isSelf={isSelf}
+            key={combatant.name}
+            max={max}
+            {...stats}
+          />
+        );
+      }
+    );
 
     return <ul className="combatants">{rows}</ul>;
   }
 }
 
 class DamageMeter extends React.Component {
-  static defaultProps = {
-    parseData: {},
-    noJobColors: false,
-  };
-
   constructor(props) {
     super(props);
     this.state = {
@@ -438,8 +415,6 @@ class DamageMeter extends React.Component {
     return true;
   }
 
-  handleCombatRowClick() {}
-
   handleViewChange() {
     const views = Object.keys(View);
     const index = views.indexOf(this.state.currentView);
@@ -450,16 +425,9 @@ class DamageMeter extends React.Component {
   }
 
   render() {
-    const debug = false;
-    let data, encounterData;
-
-    if (this.props.selectedEncounter) {
-      data = this.props.selectedEncounter.Combatant;
-      encounterData = this.props.selectedEncounter.Encounter;
-    } else {
-      data = this.props.parseData.Combatant;
-      encounterData = this.props.parseData.Encounter;
-    }
+    const encounter = this.props.selectedEncounter
+      ? this.props.selectedEncounter
+      : this.props.parseData;
 
     const stat = {
       [View.Damage]: "damage",
@@ -468,29 +436,28 @@ class DamageMeter extends React.Component {
       [View.Deaths]: "deaths",
     }[this.state.currentView];
 
-    data = _.sortBy(
-      _.filter(data, (d) => parseInt(d[stat]) > 0),
+    const combatants = _.sortBy(
+      _.filter(encounter.Combatant, (d) => parseInt(d[stat]) > 0),
       (d) => -parseInt(d[stat])
     );
 
     return (
       <div className="damage-meter">
         <Header
-          encounter={encounterData}
+          encounter={encounter.Encounter}
           history={this.props.history}
-          data={data}
-          onViewChange={this.handleViewChange.bind(this)}
+          combatants={combatants}
+          onViewChange={() => this.handleViewChange()}
           onSelectEncounter={this.props.onSelectEncounter}
           currentView={this.state.currentView}
         />
         <Combatants
           currentView={this.state.currentView}
-          onClick={this.handleCombatRowClick}
-          data={data}
+          combatants={combatants}
         />
-        {!debug ? null : (
+        {!options.debug ? null : (
           <div>
-            <Debugger data={this.props.parseData} />
+            <Debugger data={encounter} />
           </div>
         )}
       </div>
@@ -525,13 +492,11 @@ class App extends React.Component {
   }
 
   componentDidMount() {
-    document.addEventListener(
-      "onOverlayDataUpdate",
-      this.onOverlayDataUpdate.bind(this)
+    document.addEventListener("onOverlayDataUpdate", (e) =>
+      this.onOverlayDataUpdate(e)
     );
-    document.addEventListener(
-      "onOverlayStateUpdate",
-      this.onOverlayStateUpdate.bind(this)
+    document.addEventListener("onOverlayStateUpdate", (e) =>
+      this.onOverlayStateUpdate(e)
     );
 
     try {

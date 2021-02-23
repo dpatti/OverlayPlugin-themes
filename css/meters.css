@@ -2,6 +2,7 @@ html {
     box-sizing: border-box;
     height: 100%;
     overflow: hidden;
+    user-select: none;
 }
 
 .resizable {
@@ -45,6 +46,10 @@ ul {
 }
 
 .header {
+}
+
+.header-right {
+    float: right;
 }
 
 .view-color.damage  { --view-color: #2a81d7; }
