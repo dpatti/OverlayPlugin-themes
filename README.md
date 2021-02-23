@@ -1,8 +1,16 @@
 ## Releases
 
+### dev
+
+URL: <https://dpatti.github.io/ffxiv-overlay/releases/dev/>
+
+* Shows limit break and other sources
+* New, cleaner class icons
+* Resets view to new encounter when it starts
+
 ### v2
 
-[URL](https://dpatti.github.io/ffxiv-overlay/releases/dev/)
+URL: <https://dpatti.github.io/ffxiv-overlay/releases/v2/>
 
 * Changed class colors to match fflogs
 * Fixed sorting of damage meters when dps is unknown due to an upstream
@@ -15,7 +23,7 @@
 
 ### v1
 
-[URL](https://dpatti.github.io/ffxiv-overlay/releases/v1/)
+URL: <https://dpatti.github.io/ffxiv-overlay/releases/v1/>
 
 * Initial fork of [rdmty](https://github.com/billyvg/OverlayPlugin-themes)
 * Added raid dps to header
@@ -35,5 +43,4 @@ cd releases/dev && python -m http.server
 ```
 
 - [ ] Update react and lodash, bundle to one file
-- [ ] Add Limit Break as participant
 - [ ] Do something about the stats pane
