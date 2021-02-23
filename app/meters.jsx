@@ -1,5 +1,4 @@
 /* global _ */
-const IMAGE_PATH = "images";
 const LIMIT_BREAK = "Limit Break";
 const YOU = "YOU";
 
@@ -437,8 +436,6 @@ class DamageMeter extends React.Component {
 
   handleCombatRowClick() {}
 
-  handleClick() {}
-
   handleViewChange() {
     let index = this.state.currentViewIndex;
 
@@ -453,25 +450,13 @@ class DamageMeter extends React.Component {
     });
   }
 
-  handleSelectEncounter(index) {
-    if (index >= 0) {
-      this.setState({
-        selectedEncounter: this.props.history[index],
-      });
-    } else {
-      this.setState({
-        selectedEncounter: null,
-      });
-    }
-  }
-
   render() {
     const debug = false;
     let data, encounterData;
 
-    if (this.state.selectedEncounter) {
-      data = this.state.selectedEncounter.Combatant;
-      encounterData = this.state.selectedEncounter.Encounter;
+    if (this.props.selectedEncounter) {
+      data = this.props.selectedEncounter.Combatant;
+      encounterData = this.props.selectedEncounter.Encounter;
     } else {
       data = this.props.parseData.Combatant;
       encounterData = this.props.parseData.Encounter;
@@ -489,20 +474,13 @@ class DamageMeter extends React.Component {
     );
 
     return (
-      <div
-        onClick={this.handleClick}
-        className={
-          "damage-meter" +
-          (!this.props.parseData.isActive ? " inactive" : "") +
-          (!this.props.noJobColors ? " show-job-colors" : "")
-        }
-      >
+      <div className="damage-meter">
         <Header
           encounter={encounterData}
           history={this.props.history}
           data={data}
           onViewChange={this.handleViewChange.bind(this)}
-          onSelectEncounter={this.handleSelectEncounter.bind(this)}
+          onSelectEncounter={this.props.onSelectEncounter}
           currentView={this.props.chartViews[this.state.currentViewIndex]}
         />
         <Combatants
@@ -543,6 +521,7 @@ class App extends React.Component {
     this.state = {
       parseData: null,
       history: [],
+      selectedEncounter: null,
     };
   }
 
@@ -577,11 +556,19 @@ class App extends React.Component {
   onOverlayDataUpdate(e) {
     const parseData = e.detail;
     let history = this.state.history;
+    let selectedEncounter = this.state.selectedEncounter;
 
-    // save this encounter data
+    // Encounter started
     if (
-      this.state.parseData &&
-      this.state.parseData.Encounter.title === "Encounter" &&
+      this.state.parseData?.Encounter.title !== "Encounter" &&
+      parseData.Encounter.title == "Encounter"
+    ) {
+      selectedEncounter = null;
+    }
+
+    // Encounter ended
+    if (
+      this.state.parseData?.Encounter.title === "Encounter" &&
       parseData.Encounter.title !== "Encounter"
     ) {
       history = [
@@ -596,7 +583,19 @@ class App extends React.Component {
       localStorage.setItem(App.STORAGE_KEY, JSON.stringify(history));
     }
 
-    this.setState({ parseData, history });
+    this.setState({ parseData, history, selectedEncounter });
+  }
+
+  onSelectEncounter(index) {
+    if (index >= 0) {
+      this.setState({
+        selectedEncounter: this.state.history[index],
+      });
+    } else {
+      this.setState({
+        selectedEncounter: null,
+      });
+    }
   }
 
   render() {
@@ -604,6 +603,8 @@ class App extends React.Component {
       <DamageMeter
         parseData={this.state.parseData}
         history={this.state.history}
+        selectedEncounter={this.state.selectedEncounter}
+        onSelectEncounter={(index) => this.onSelectEncounter(index)}
       />
     ) : (
       <h3>Awaiting data.</h3>
