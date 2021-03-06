@@ -89,17 +89,6 @@ class CombatantCompact extends React.Component {
   }
 }
 
-class Stat extends React.Component {
-  render() {
-    return this.props.value ? (
-      <div className="cell">
-        <span className="label ff-header">{this.props.label}</span>
-        <span className="value ff-text">{this.props.value}</span>
-      </div>
-    ) : null;
-  }
-}
-
 class Stats extends React.Component {
   constructor(props) {
     super(props);
@@ -118,7 +107,13 @@ class Stats extends React.Component {
     const self = this.props.self;
     const dataSource = this.state.group || !self ? this.props.encounter : self;
 
-    const ifSelf = (x) => (!this.state.group ? x : null);
+    const Stat = (props) =>
+      props.value && (!props.self || !this.state.group) ? (
+        <div className="cell">
+          <span className="label ff-header">{props.label}</span>
+          <span className="value ff-text">{props.value}</span>
+        </div>
+      ) : null;
 
     return (
       <div className="extra-details">
@@ -145,10 +140,9 @@ class Stats extends React.Component {
             )})`}
           />
           <Stat label="Max" value={dataSource.maxhit} />
-          {/* These can be grouped with React.Fragment if react is upgraded */}
-          {ifSelf(<Stat label="Crit%" value={self?.["crithit%"]} />)}
-          {ifSelf(<Stat label="Direct%" value={self?.DirectHitPct} />)}
-          {ifSelf(<Stat label="DirectCrit%" value={self?.CritDirectHitPct} />)}
+          <Stat self label="Crit%" value={self?.["crithit%"]} />
+          <Stat self label="Direct%" value={self?.DirectHitPct} />
+          <Stat self label="DirectCrit%" value={self?.CritDirectHitPct} />
         </div>
         <hr />
         <div className="extra-row healing">
@@ -159,7 +153,7 @@ class Stats extends React.Component {
             )})`}
           />
           <Stat label="Max" value={dataSource.maxheal} />
-          {ifSelf(<Stat label="Crit%" value={self?.["critheal%"]} />)}
+          <Stat self label="Crit%" value={self?.["critheal%"]} />
         </div>
       </div>
     );
