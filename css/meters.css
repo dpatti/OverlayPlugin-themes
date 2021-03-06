@@ -242,7 +242,7 @@ li:last-child {
     height: var(--icon-size);
     width: var(--icon-size);
     border: calc((var(--box-size) - var(--icon-size)) / 2) solid rgba(0, 0, 0, 0);
-    background-image: url(../images/default/actors.png);
+    background-image: url(../images/actors.png);
     background-repeat: no-repeat;
     background-size: auto var(--icon-size);
     background-position: calc(-1 * var(--icon-size) * var(--actor-index, -1));
