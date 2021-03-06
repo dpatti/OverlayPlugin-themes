@@ -208,7 +208,7 @@ li:last-child {
 .gla { --actor-index: 11; }
 .gnb { --actor-index: 12; }
 .lnc { --actor-index: 13; }
-/* .lb  { --actor-index: 14; } */
+.lb  { --actor-index: 14; }
 .arc { --actor-index: 15; }
 .mar { --actor-index: 16; }
 .mnk { --actor-index: 17; }
@@ -250,6 +250,8 @@ li:last-child {
     filter: drop-shadow(0px 0px 1px rgba(0, 0, 0, 1.0));
     margin-right: 4px;
 }
+.lb .job-icon { transform: scale(0.8); }
+.sch .job-icon { transform: scale(0.9); }
 
 .character-job {
     margin-left: 4px;
