@@ -7,6 +7,7 @@ URL: <https://dpatti.github.io/ffxiv-overlay/releases/dev/>
 * Shows limit break and other sources
 * New, cleaner class icons
 * Resets view to new encounter when it starts
+* Added new views for deaths and a very crude uptime view
 
 ### v2
 
@@ -41,6 +42,3 @@ and
 ```
 cd releases/dev && python -m http.server
 ```
-
-- [ ] Update react and lodash, bundle to one file
-- [ ] Do something about the stats pane
