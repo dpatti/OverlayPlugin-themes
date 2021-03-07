@@ -55,6 +55,7 @@ ul {
 .view-color.damage  { --view-color: #2a81d7; }
 .view-color.healing { --view-color: #039158; }
 .view-color.tanking { --view-color: #ca5e4e; }
+.view-color.uptime  { --view-color: #923399; }
 .view-color.deaths  { --view-color: #9d807b; }
 
 .encounter-header {
@@ -165,7 +166,7 @@ li:last-child {
     margin-left: 4px;
     white-space: nowrap;
 }
-.row .additional {
+.row .note {
     margin-right: 4px;
 }
 .row .total {

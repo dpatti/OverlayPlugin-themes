@@ -8,6 +8,7 @@ const View = {
   Damage: "Damage",
   Healing: "Healing",
   Tanking: "Tanking",
+  Uptime: "Uptime",
   Deaths: "Deaths",
 };
 
@@ -47,12 +48,17 @@ const formatNumber = (number) => {
     return (number / 1000000).toFixed(2) + "M";
   } else if (number >= 1000) {
     return (number / 1000).toFixed(2) + "K";
-  } else if (number % 1 == 0) {
-    // A bit of a hack for deaths so that they don't show as 1.00
-    return number;
   }
 
   return number.toFixed(2);
+};
+
+const formatPercent = (number) => `${(number * 100).toFixed(0)}%`;
+
+const formatSpan = (seconds) => {
+  const min = (seconds / 60).toFixed(0);
+  const sec = (Math.abs(seconds) % 60).toFixed(0);
+  return `${min}:${("0" + sec).slice(-2)}`;
 };
 
 class CombatantCompact extends React.Component {
@@ -67,12 +73,12 @@ class CombatantCompact extends React.Component {
         <div className="bar" style={{ width: width }} />
         <div className="text-overlay">
           <div className="stats">
-            <span className="total">{formatNumber(this.props.total)}</span>
-            {this.props.additional ? (
-              <span className="additional">[{this.props.additional}]</span>
+            <span className="total">{this.props.format(this.props.total)}</span>
+            {this.props.note ? (
+              <span className="note">[{this.props.note}]</span>
             ) : null}
-            {this.props.perSecond !== null
-              ? `(${this.props.perSecond}, ${this.props.percentage})`
+            {this.props.extra.length > 0
+              ? `(${this.props.extra.join(", ")})`
               : null}
           </div>
           <div className="info">
@@ -203,6 +209,7 @@ class Header extends React.Component {
       [View.Damage]: `Damage (${formatNumber(encounter.encdps)} dps)`,
       [View.Healing]: `Healing (${formatNumber(encounter.enchps)} hps)`,
       [View.Tanking]: `Damage Taken`,
+      [View.Uptime]: `Uptime`,
       [View.Deaths]: `Deaths (${encounter.deaths} total)`,
     }[this.props.currentView];
 
@@ -279,6 +286,8 @@ class Combatants extends React.Component {
         const actor =
           combatant.name === LIMIT_BREAK ? "lb" : combatant.Job.toLowerCase();
 
+        const uptime = parseInt(combatant.DURATION);
+
         const stats = _.merge(
           {
             actor,
@@ -287,25 +296,30 @@ class Combatants extends React.Component {
           },
           {
             [View.Damage]: {
+              format: formatNumber,
               total: combatant.damage,
-              perSecond: formatNumber(combatant.encdps),
-              percentage: combatant["damage%"],
+              extra: [formatNumber(combatant.encdps), combatant["damage%"]],
             },
             [View.Healing]: {
+              format: formatNumber,
               total: combatant.healed,
-              additional: combatant["OverHealPct"],
-              perSecond: formatNumber(combatant.enchps),
-              percentage: combatant["healed%"],
+              note: combatant["OverHealPct"],
+              extra: [formatNumber(combatant.enchps), combatant["healed%"]],
             },
             [View.Tanking]: {
+              format: formatNumber,
               total: combatant.damagetaken,
-              perSecond: combatant.ParryPct,
-              percentage: combatant.BlockPct,
+              extra: [combatant.ParryPct, combatant.BlockPct],
+            },
+            [View.Uptime]: {
+              format: formatSpan,
+              total: uptime,
+              extra: [formatPercent(max ? uptime / max : 1.0)],
             },
             [View.Deaths]: {
+              format: _.identity,
               total: combatant.deaths,
-              perSecond: null,
-              percentage: null,
+              extra: [],
             },
           }[this.props.currentView]
         );
@@ -367,6 +381,7 @@ class DamageMeter extends React.Component {
       [View.Damage]: "damage",
       [View.Healing]: "healed",
       [View.Tanking]: "damagetaken",
+      [View.Uptime]: "DURATION",
       [View.Deaths]: "deaths",
     }[this.state.currentView];
 
