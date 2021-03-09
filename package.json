@@ -17,6 +17,6 @@
     "react-dom": "^17.0.1"
   },
   "scripts": {
-    "build": "babel --watch --out-dir lib/ app/meters.jsx node_modules/react/umd/react.production.min.js node_modules/react-dom/umd/react-dom.production.min.js node_modules/lodash/lodash.min.js"
+    "build": "babel --watch --out-dir lib/ app/meters.jsx app/timers.jsx node_modules/react/umd/react.production.min.js node_modules/react-dom/umd/react-dom.production.min.js node_modules/lodash/lodash.min.js"
   }
 }

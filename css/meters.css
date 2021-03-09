@@ -235,21 +235,22 @@ li:last-child {
     transition: width .4s ease-in-out;
 }
 
-.job-icon {
+.icon {
     float: left;
     --box-size: 20px;
     --icon-size: 18px;
 
     height: var(--icon-size);
     width: var(--icon-size);
-    border: calc((var(--box-size) - var(--icon-size)) / 2) solid rgba(0, 0, 0, 0);
+    margin: calc((var(--box-size) - var(--icon-size)) / 2);
+    filter: drop-shadow(0px 0px 1px rgba(0, 0, 0, 1.0));
+    background-size: auto var(--icon-size);
+}
+.job-icon {
     background-image: url(../images/actors.png);
     background-repeat: no-repeat;
-    background-size: auto var(--icon-size);
     background-position: calc(-1 * var(--icon-size) * var(--actor-index, -1));
     background-clip: padding-box;
-    filter: drop-shadow(0px 0px 1px rgba(0, 0, 0, 1.0));
-    margin-right: 4px;
 }
 .lb .job-icon { transform: scale(0.8); }
 .sch .job-icon { transform: scale(0.9); }
@@ -260,7 +261,7 @@ li:last-child {
     opacity: 0.6;
 }
 .character-name {
-    padding-left: 2px;
+    margin-left: 6px;
     overflow: hidden;
     text-overflow: ellipsis;
 }
@@ -320,4 +321,17 @@ li:last-child {
 }
 .clearfix:after{
   clear:both;
+}
+
+/* Timers */
+.row.active { }
+.row.cooldown {
+  opacity: 0.5;
+}
+.bar.fast {
+  transition: width .1s ease-in-out;
+}
+.subtext {
+    margin-left: 4px;
+    opacity: 0.6;
 }

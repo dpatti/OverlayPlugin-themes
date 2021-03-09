@@ -82,7 +82,7 @@ class CombatantCompact extends React.Component {
               : null}
           </div>
           <div className="info">
-            <span className="job-icon"></span>
+            <span className="icon job-icon"></span>
             <span className="rank">{this.props.rank}.</span>
             <span className="character-name">
               {formatName(this.props.characterName)}

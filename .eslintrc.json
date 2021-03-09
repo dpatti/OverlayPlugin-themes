@@ -7,6 +7,10 @@
   "parser": "@babel/eslint-parser",
   "plugins": ["@babel", "react"],
   "rules": {
-    "react/prop-types": "off"
+    "react/prop-types": "off",
+    "no-unused-vars": [
+      "error",
+      { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }
+    ]
   }
 }

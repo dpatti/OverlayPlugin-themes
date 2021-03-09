@@ -9,7 +9,11 @@
     <script src="lib/lodash.min.js"></script>
     <script>
       const app = document.createElement('script');
-      app.src = "lib/meters.js?_=" + Math.random();
+      if (/\?timers/.test(document.location.search)) {
+        app.src = "lib/timers.js?_=" + Math.random();
+      } else {
+        app.src = "lib/meters.js?_=" + Math.random();
+      }
       app.onload = () => {
         ReactDOM.render(
           React.createElement(App, {}),
