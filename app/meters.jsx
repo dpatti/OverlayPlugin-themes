@@ -56,7 +56,7 @@ const formatNumber = (number) => {
 const formatPercent = (number) => `${(number * 100).toFixed(0)}%`;
 
 const formatSpan = (seconds) => {
-  const min = (seconds / 60).toFixed(0);
+  const min = Math.floor(seconds / 60);
   const sec = (Math.abs(seconds) % 60).toFixed(0);
   return `${min}:${("0" + sec).slice(-2)}`;
 };
