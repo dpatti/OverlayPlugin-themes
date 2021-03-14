@@ -55,7 +55,8 @@ const formatNumber = (number) => {
 
 const formatPercent = (number) => `${(number * 100).toFixed(0)}%`;
 
-const formatSpan = (seconds) => {
+const formatSpan = (ms) => {
+  const seconds = ms / 1000;
   const min = Math.floor(seconds / 60);
   const sec = (Math.abs(seconds) % 60).toFixed(0);
   return `${min}:${("0" + sec).slice(-2)}`;
@@ -286,8 +287,6 @@ class Combatants extends React.Component {
         const actor =
           combatant.name === LIMIT_BREAK ? "lb" : combatant.Job.toLowerCase();
 
-        const uptime = parseInt(combatant.DURATION);
-
         const stats = _.merge(
           {
             actor,
@@ -303,7 +302,7 @@ class Combatants extends React.Component {
             [View.Healing]: {
               format: formatNumber,
               total: combatant.healed,
-              note: combatant["OverHealPct"],
+              note: combatant.OverHealPct,
               extra: [formatNumber(combatant.enchps), combatant["healed%"]],
             },
             [View.Tanking]: {
@@ -313,8 +312,8 @@ class Combatants extends React.Component {
             },
             [View.Uptime]: {
               format: formatSpan,
-              total: uptime,
-              extra: [formatPercent(max ? uptime / max : 1.0)],
+              total: combatant.uptime,
+              extra: [formatPercent(combatant["uptime%"])],
             },
             [View.Deaths]: {
               format: _.identity,
@@ -352,7 +351,7 @@ class DamageMeter extends React.Component {
   }
 
   shouldComponentUpdate(nextProps, nextState) {
-    if (nextProps.parseData.Encounter.encdps === "---") {
+    if (nextProps.data.Encounter.encdps === "---") {
       return false;
     }
 
@@ -373,15 +372,13 @@ class DamageMeter extends React.Component {
   }
 
   render() {
-    const encounter = this.props.selectedEncounter
-      ? this.props.selectedEncounter
-      : this.props.parseData;
+    const encounter = this.props.data;
 
     const stat = {
       [View.Damage]: "damage",
       [View.Healing]: "healed",
       [View.Tanking]: "damagetaken",
-      [View.Uptime]: "DURATION",
+      [View.Uptime]: "uptime",
       [View.Deaths]: "deaths",
     }[this.state.currentView];
 
@@ -436,9 +433,10 @@ class App extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
-      parseData: null,
+      currentEncounter: null,
       history: [],
       selectedEncounter: null,
+      accumulator: null,
     };
   }
 
@@ -453,7 +451,7 @@ class App extends React.Component {
     try {
       const stored = JSON.parse(localStorage.getItem(App.STORAGE_KEY));
       if (stored) {
-        this.setState({ parseData: stored[0], history: stored });
+        this.setState({ currentEncounter: stored[0], history: stored });
       }
     } catch (ex) {
       console.error(`Couldn't load state: ${ex}`);
@@ -469,36 +467,42 @@ class App extends React.Component {
   }
 
   onOverlayDataUpdate(e) {
-    const parseData = e.detail;
+    const currentEncounter = e.detail;
     let history = this.state.history;
     let selectedEncounter = this.state.selectedEncounter;
+    let accumulator;
+
+    const isActive = (enc) => enc !== null && enc.isActive === "true";
 
     // Encounter started
-    if (
-      this.state.parseData?.Encounter.title !== "Encounter" &&
-      parseData.Encounter.title == "Encounter"
-    ) {
+    if (!isActive(this.state.currentEncounter) && isActive(currentEncounter)) {
       selectedEncounter = null;
+      accumulator = {
+        lastUpdate: performance.now(),
+      };
+    }
+
+    // Encounter progress
+    if (isActive(this.state.currentEncounter)) {
+      accumulator = this.updateWithAccumulator(
+        this.state.currentEncounter,
+        currentEncounter
+      );
     }
 
     // Encounter ended
-    if (
-      this.state.parseData?.Encounter.title === "Encounter" &&
-      parseData.Encounter.title !== "Encounter"
-    ) {
-      history = [
-        {
-          Encounter: parseData.Encounter,
-          Combatant: parseData.Combatant,
-        },
-      ]
-        .concat(history)
-        .slice(0, 10);
+    if (isActive(this.state.currentEncounter) && !isActive(currentEncounter)) {
+      history = [currentEncounter].concat(history).slice(0, 10);
 
       localStorage.setItem(App.STORAGE_KEY, JSON.stringify(history));
     }
 
-    this.setState({ parseData, history, selectedEncounter });
+    this.setState({
+      currentEncounter,
+      history,
+      selectedEncounter,
+      accumulator,
+    });
   }
 
   onSelectEncounter(index) {
@@ -513,12 +517,55 @@ class App extends React.Component {
     }
   }
 
+  updateWithAccumulator(prev, next) {
+    const acc = this.state.accumulator;
+    const now = performance.now();
+    const elapsed =
+      prev.Encounter.DURATION === next.Encounter.DURATION
+        ? 0
+        : now - acc.lastUpdate;
+
+    // Uptime: for each player, we keep track of some extra data, like when the
+    // last time we saw them take an "action" and what their uptime is. Taking
+    // an action means their `hits` or `heals` went up by at least 1 since the
+    // last update. We use this to compute uptime. Uptime is then defined as the
+    // sum of all update intervals where `now - lastAction < GCD`. This is
+    // obviously best-effort, since we can't reasonably take speed into account
+    // or whether the action was a GCD or not.
+    const GCD = 2500; // milliseconds
+    next.Encounter.elapsed = (prev.Encounter.elapsed ?? 0) + elapsed;
+    const actions = (c) => (c ? parseInt(c.hits) + parseInt(c.heals) : 0);
+    for (let name in next.Combatant) {
+      const prevLastAction = prev.Combatant[name].lastAction ?? 0;
+      const prevUptime = prev.Combatant[name].uptime ?? 0;
+
+      const uptime =
+        prevUptime +
+        (now - prevLastAction < GCD
+          ? elapsed
+          : // Add any possible partial update: `acc.lastUpdate - prevLastAction`
+            // represents the time we've already credited to this player's
+            // uptime
+            Math.max(GCD - (acc.lastUpdate - prevLastAction), 0));
+
+      const didAction =
+        actions(prev.Combatant[name]) < actions(next.Combatant[name]);
+
+      _.extend(next.Combatant[name], {
+        lastAction: didAction ? now : prevLastAction,
+        uptime,
+        ["uptime%"]: uptime / next.Encounter.elapsed,
+      });
+    }
+
+    return { lastUpdate: now };
+  }
+
   render() {
-    return this.state.parseData ? (
+    return this.state.currentEncounter ? (
       <DamageMeter
-        parseData={this.state.parseData}
+        data={this.state.selectedEncounter ?? this.state.currentEncounter}
         history={this.state.history}
-        selectedEncounter={this.state.selectedEncounter}
         onSelectEncounter={(index) => this.onSelectEncounter(index)}
       />
     ) : (
