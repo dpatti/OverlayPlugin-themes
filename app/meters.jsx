@@ -1,6 +1,8 @@
 const _ = window._;
 const React = window.React;
 
+const GCD = 2500;
+
 const LIMIT_BREAK = "Limit Break";
 const YOU = "YOU";
 
@@ -30,6 +32,9 @@ const options = ((search) => {
     debug: "debug" in options || false,
   };
 })(document.location.search);
+
+// helper to functionally set a key in an object by returning a new copy
+const fset = (obj, key, value) => _.defaults({ [key]: value }, obj);
 
 const formatName = (name) => {
   if (name == YOU) {
@@ -436,11 +441,13 @@ class App extends React.Component {
       currentEncounter: null,
       history: [],
       selectedEncounter: null,
-      accumulator: null,
+      actionTracking: {},
+      serverTime: new Date(0),
     };
   }
 
   componentDidMount() {
+    document.addEventListener("onLogLine", (e) => this.onLogLine(e));
     document.addEventListener("onOverlayDataUpdate", (e) =>
       this.onOverlayDataUpdate(e)
     );
@@ -470,25 +477,18 @@ class App extends React.Component {
     const currentEncounter = e.detail;
     let history = this.state.history;
     let selectedEncounter = this.state.selectedEncounter;
-    let accumulator;
+    let actionTracking = this.state.actionTracking;
 
     const isActive = (enc) => enc !== null && enc.isActive === "true";
 
     // Encounter started
     if (!isActive(this.state.currentEncounter) && isActive(currentEncounter)) {
       selectedEncounter = null;
-      accumulator = {
-        lastUpdate: performance.now(),
-      };
+      actionTracking = {};
     }
 
-    // Encounter progress
-    if (isActive(this.state.currentEncounter)) {
-      accumulator = this.updateWithAccumulator(
-        this.state.currentEncounter,
-        currentEncounter
-      );
-    }
+    // Mutates encounter
+    this.embellish(currentEncounter, actionTracking);
 
     // Encounter ended
     if (isActive(this.state.currentEncounter) && !isActive(currentEncounter)) {
@@ -501,8 +501,62 @@ class App extends React.Component {
       currentEncounter,
       history,
       selectedEncounter,
-      accumulator,
+      actionTracking,
     });
+  }
+
+  onLogLine(e) {
+    const [code, timestamp, ...message] = JSON.parse(e.detail);
+    // Sometimes the log lines go backwards in time, though I think this is
+    // unlikely within a given code.
+    const serverTime = Math.max(this.state.serverTime, new Date(timestamp));
+
+    const getRecord = (sourceName) =>
+      this.state.actionTracking[sourceName] ?? {
+        castStart: null,
+        lastCredit: new Date(0),
+        uptime: 0,
+      };
+
+    const applyUpdate = (sourceName, data) =>
+      this.setState({
+        serverTime,
+        actionTracking: fset(this.state.actionTracking, sourceName, data),
+      });
+
+    if (code === "20") {
+      // Start casting
+      const [_sourceID, sourceName] = message;
+      const data = fset(getRecord(sourceName), "castStart", serverTime);
+      applyUpdate(sourceName, data);
+    } else if (code === "23") {
+      // Cancelled cast
+      const [_sourceID, sourceName] = message;
+      const data = fset(getRecord(sourceName), "castStart", null);
+      applyUpdate(sourceName, data);
+    } else if (code === "21" || code === "22") {
+      // Action used: if you were casting, you get credit for the duration of
+      // that cast or `GCD`, whichever is greater. If you weren't casting, you
+      // get `GCD` worth of uptime credited to you. In either case, if `GCD` has
+      // not elapsed since your previous credit time, the next credit is reduced
+      // so as not to double-credit. Example: if I use an action at time t then
+      // another at t+1s, I would get 3.5s total uptime credit. This is a best
+      // approximation with the information we have available.
+      const [_sourceID, sourceName] = message;
+      const { castStart, lastCredit, uptime } = getRecord(sourceName);
+      const wasCasting = castStart !== null;
+
+      const uptimeCredit = wasCasting
+        ? Math.max(GCD, serverTime - castStart)
+        : GCD;
+      const uptimeOvercredit = Math.max(0, GCD - (serverTime - lastCredit));
+
+      applyUpdate(sourceName, {
+        castStart: null,
+        lastCredit: wasCasting ? castStart : serverTime,
+        uptime: uptime + uptimeCredit - uptimeOvercredit,
+      });
+    }
   }
 
   onSelectEncounter(index) {
@@ -517,48 +571,20 @@ class App extends React.Component {
     }
   }
 
-  updateWithAccumulator(prev, next) {
-    const acc = this.state.accumulator;
-    const now = performance.now();
-    const elapsed =
-      prev.Encounter.DURATION === next.Encounter.DURATION
-        ? 0
-        : now - acc.lastUpdate;
+  embellish(data, actionTracking) {
+    // This won't work for "YOU" unless you specify your player name
+    for (let name in data.Combatant) {
+      let sourceName = formatName(name);
+      let uptime = actionTracking[sourceName]?.uptime ?? 0;
+      // We're using ACT's notion of encounter here, which might trim downtime,
+      // but that should be a good upper bound still.
+      let encounterDuration = parseInt(data.Encounter.DURATION) * 1000;
 
-    // Uptime: for each player, we keep track of some extra data, like when the
-    // last time we saw them take an "action" and what their uptime is. Taking
-    // an action means their `hits` or `heals` went up by at least 1 since the
-    // last update. We use this to compute uptime. Uptime is then defined as the
-    // sum of all update intervals where `now - lastAction < GCD`. This is
-    // obviously best-effort, since we can't reasonably take speed into account
-    // or whether the action was a GCD or not.
-    const GCD = 2500; // milliseconds
-    next.Encounter.elapsed = (prev.Encounter.elapsed ?? 0) + elapsed;
-    const actions = (c) => (c ? parseInt(c.hits) + parseInt(c.heals) : 0);
-    for (let name in next.Combatant) {
-      const prevLastAction = prev.Combatant[name].lastAction ?? 0;
-      const prevUptime = prev.Combatant[name].uptime ?? 0;
-
-      const uptime =
-        prevUptime +
-        (now - prevLastAction < GCD
-          ? elapsed
-          : // Add any possible partial update: `acc.lastUpdate - prevLastAction`
-            // represents the time we've already credited to this player's
-            // uptime
-            Math.max(GCD - (acc.lastUpdate - prevLastAction), 0));
-
-      const didAction =
-        actions(prev.Combatant[name]) < actions(next.Combatant[name]);
-
-      _.extend(next.Combatant[name], {
-        lastAction: didAction ? now : prevLastAction,
+      _.assign(data.Combatant[name], {
         uptime,
-        ["uptime%"]: uptime / next.Encounter.elapsed,
+        ["uptime%"]: Math.min(1, uptime / encounterDuration),
       });
     }
-
-    return { lastUpdate: now };
   }
 
   render() {
