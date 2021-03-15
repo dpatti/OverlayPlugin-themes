@@ -15,7 +15,7 @@ Map.prototype.update = function (key, f) {
 // Functional filtering for maps
 Map.prototype.filter = function (f) {
   const m = new Map();
-  for (let [key, value] of this.entries()) {
+  for (let [key, value] of this) {
     if (f(value)) m.set(key, value);
   }
   return m;
@@ -236,51 +236,48 @@ class Timers extends React.Component {
     // timer identified by the unique (action, source) tuple. The values are a
     // mapping from targets to last event on that target. We're constructing a
     // single array of unsorted timers from that distilled data.
-    const timers = Array.from(this.props.tracking.entries()).flatMap(
-      ([key, targets]) => {
-        const { duration, cooldown, targeting, job } = DATA[key.actionID];
-        const events = Array.from(targets.entries());
+    const timers = Array.from(this.props.tracking).flatMap(([key, targets]) => {
+      const { duration, cooldown, targeting, job } = DATA[key.actionID];
 
-        if (events.length === 0) {
-          return [];
+      if (targets.size === 0) {
+        return [];
+      } else {
+        const event = _.maxBy(Array.from(targets.values()), "castAt");
+        const elapsed = (this.props.serverTime - event.castAt) / 1000;
+
+        let state, timer, percentage;
+
+        if (elapsed < duration) {
+          state = "active";
+          timer = Math.max(0, duration - elapsed);
+          percentage = timer / duration;
         } else {
-          const [_target, event] = _.maxBy(events, ([_, { castAt }]) => castAt);
-          const elapsed = (this.props.serverTime - event.castAt) / 1000;
-
-          let state, timer, percentage;
-
-          if (elapsed < duration) {
-            state = "active";
-            timer = Math.max(0, duration - elapsed);
-            percentage = timer / duration;
-          } else {
-            state = "cooldown";
-            timer = Math.max(0, cooldown - elapsed);
-            percentage = elapsed / cooldown;
-          }
-
-          const subText =
-            state === "active"
-              ? targeting !== Target.Many
-                ? event.target
-                : null
-              : null;
-
-          const icon = ActionIcon.get(key.actionID);
-
-          return {
-            key,
-            state,
-            timer,
-            percentage,
-            icon,
-            job,
-            subText,
-            ...event,
-          };
+          state = "cooldown";
+          timer = Math.max(0, cooldown - elapsed);
+          percentage = elapsed / cooldown;
         }
+
+        const subText =
+          state === "active"
+            ? targeting !== Target.Many
+              ? event.target
+              : null
+            : null;
+
+        const icon = ActionIcon.get(key.actionID);
+
+        return {
+          key,
+          state,
+          timer,
+          percentage,
+          icon,
+          job,
+          subText,
+          ...event,
+        };
       }
-    );
+    });
 
     const ranking = [
       ({ state }) => (state === "active" ? 0 : 1),

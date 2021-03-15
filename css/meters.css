@@ -330,7 +330,7 @@ li:last-child {
   opacity: 0.5;
 }
 .timers .bar.fast {
-  transition: width .1s ease-in-out;
+  transition: width .05s linear;
 }
 .timers .subtext {
     margin-left: 4px;
