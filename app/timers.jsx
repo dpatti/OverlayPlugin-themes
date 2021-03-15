@@ -155,14 +155,33 @@ class ActionIcon {
   }
 }
 
-class RowKey {
+// Because we want to use these as keys in a `Map`, and because maps use strict
+// comparison for keys, we have to keep a global store of them similar to how
+// `Symbol("foo")` is different than `Symbol.for("foo")`. This feels a bit
+// silly, but the only other solutions are keeping two nestings of maps for each
+// key part or using the string representation and then having a function that
+// parses the string back into a `TimerKey`.
+class TimerKey {
+  static store = {};
+
+  static stringRepr(actionID, sourceID) {
+    return `${actionID}|${sourceID}`;
+  }
+
+  static for(actionID, sourceID) {
+    return (this.store[this.stringRepr(actionID, sourceID)] ??= new TimerKey(
+      actionID,
+      sourceID
+    ));
+  }
+
   constructor(actionID, sourceID) {
     this.actionID = actionID;
     this.sourceID = sourceID;
   }
 
   toString() {
-    return `${this.actionID}|${this.sourceID}`;
+    return TimerKey.stringRepr(this.actionID, this.sourceID);
   }
 }
 
@@ -203,20 +222,19 @@ class Timer extends React.Component {
 
 class Timers extends React.Component {
   render() {
-    const timers = [];
+    // Here we're traversing through a map of keys that correspond to a single
+    // timer identified by the unique (action, source) tuple. The values are a
+    // mapping from targets to last event on that target. We're constructing a
+    // single array of unsorted timers from that distilled data.
+    const timers = Array.from(this.props.tracking.entries()).flatMap(
+      ([key, targets]) => {
+        const { duration, cooldown, targeting, job } = DATA[key.actionID];
+        const events = Array.from(targets.entries());
 
-    // Here we're traversing through a three-layer map of keys that comprise
-    // the triple (action, source, target) and outputting a single array of
-    // unsorted timers from that distilled data.
-    for (let [action, byAction] of this.props.actions) {
-      const { duration, cooldown, targeting, job } = DATA[action];
-
-      for (let [source, bySource] of byAction) {
-        const events = Array.from(bySource.entries());
-
-        if (events.length > 0) {
+        if (events.length === 0) {
+          return [];
+        } else {
           const [_target, event] = _.maxBy(events, ([_, { castAt }]) => castAt);
-          const key = new RowKey(action, source);
           const elapsed = (this.props.serverTime - event.castAt) / 1000;
 
           let state, timer, percentage;
@@ -238,9 +256,9 @@ class Timers extends React.Component {
                 : null
               : null;
 
-          const icon = ActionIcon.get(action);
+          const icon = ActionIcon.get(key.actionID);
 
-          timers.push({
+          return {
             key,
             state,
             timer,
@@ -249,10 +267,10 @@ class Timers extends React.Component {
             job,
             subText,
             ...event,
-          });
+          };
         }
       }
-    }
+    );
 
     const ranking = [
       ({ state }) => (state === "active" ? 0 : 1),
@@ -282,7 +300,7 @@ class App extends React.Component {
     this.state = {
       serverTime: new Date(0),
       lastClockUpdate: null,
-      actions: new Map(),
+      tracking: new Map(),
     };
   }
 
@@ -331,12 +349,11 @@ class App extends React.Component {
         target: targetName,
         castAt: this.state.serverTime,
       };
-      const actions = this.state.actions.update(actionID, (byAction) =>
-        (byAction ?? new Map()).update(sourceID, (bySource) =>
-          (bySource ?? new Map()).update(targetID, (_) => payload)
-        )
+      const key = TimerKey.for(actionID, sourceID);
+      const tracking = this.state.tracking.update(key, (targets) =>
+        (targets ?? new Map()).update(targetID, (_) => payload)
       );
-      this.setState({ actions });
+      this.setState({ tracking });
     }
   }
 
@@ -354,11 +371,9 @@ class App extends React.Component {
     if (handler) handler();
   }
 
-  dismissRow({ actionID, sourceID }) {
+  dismissRow(key) {
     this.setState({
-      actions: this.state.actions.update(actionID, (byAction) =>
-        byAction.update(sourceID, (_) => new Map())
-      ),
+      tracking: this.state.tracking.update(key, (_) => new Map()),
     });
   }
 
@@ -367,7 +382,7 @@ class App extends React.Component {
       <Timers
         dismissRow={(key) => this.dismissRow(key)}
         serverTime={this.state.serverTime}
-        actions={this.state.actions}
+        tracking={this.state.tracking}
       />
     );
   }
