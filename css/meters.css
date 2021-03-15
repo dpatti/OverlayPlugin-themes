@@ -324,14 +324,15 @@ li:last-child {
 }
 
 /* Timers */
-.row.active { }
-.row.cooldown {
+.timers .row { cursor: pointer }
+.timers .row.active { }
+.timers .row.cooldown {
   opacity: 0.5;
 }
-.bar.fast {
+.timers .bar.fast {
   transition: width .1s ease-in-out;
 }
-.subtext {
+.timers .subtext {
     margin-left: 4px;
     opacity: 0.6;
 }

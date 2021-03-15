@@ -49,9 +49,9 @@ cd releases/dev && python -m http.server
   so that, e.g., a BLM spamming Umbral Soul isn't at 100% uptime.
 - timers: add more buff/debuff data
 - timers: make buff/debuff selection configurable
-- timers: click a row to dismiss it
 - timers: if possible, reset the state when a wipe happens
 - timers: show how many targets multi-target actions hit
 - timers: more distinct effect when a buff window starts
+- timers: collect old target garbage
 - meta: bundle the JS to make versioning easier
 - meta: do a pass to clean up CSS

@@ -110,8 +110,10 @@ const DATA0 = {
   // HEALING ===============================================================
 };
 
-// const DATA = DATA0;
-const DATA = _.pick(DATA0, [0x8d2, 0x1d0c, 0x40a8, 0x1ce4, 0xde5, 0x3f44]);
+const DEV = true;
+const DATA = DEV
+  ? DATA0
+  : _.pick(DATA0, [0x8d2, 0x1d0c, 0x40a8, 0x1ce4, 0xde5, 0x3f44]);
 
 class ActionIcon {
   static _cache = {};
@@ -153,6 +155,17 @@ class ActionIcon {
   }
 }
 
+class RowKey {
+  constructor(actionID, sourceID) {
+    this.actionID = actionID;
+    this.sourceID = sourceID;
+  }
+
+  toString() {
+    return `${this.actionID}|${this.sourceID}`;
+  }
+}
+
 class Timer extends React.Component {
   render() {
     // FFXIV's buff timers use ceil(), so we do the same for consistency
@@ -164,7 +177,10 @@ class Timer extends React.Component {
       : null;
 
     return (
-      <li className={`row ${this.props.state} ${this.props.job}`}>
+      <li
+        className={`row ${this.props.state} ${this.props.job}`}
+        onClick={() => this.props.dismiss()}
+      >
         <div className="bar fast" style={{ width: width }} />
         <div className="text-overlay">
           <div className="stats">
@@ -189,48 +205,52 @@ class Timers extends React.Component {
   render() {
     const timers = [];
 
+    // Here we're traversing through a three-layer map of keys that comprise
+    // the triple (action, source, target) and outputting a single array of
+    // unsorted timers from that distilled data.
     for (let [action, byAction] of this.props.actions) {
       const { duration, cooldown, targeting, job } = DATA[action];
 
       for (let [source, bySource] of byAction) {
-        const [target, event] = _.maxBy(
-          Array.from(bySource.entries()),
-          ([_, { castAt }]) => castAt
-        );
-        const key = `${source}:${target}:${action}`;
-        const elapsed = (this.props.serverTime - event.castAt) / 1000;
+        const events = Array.from(bySource.entries());
 
-        let state, timer, percentage;
+        if (events.length > 0) {
+          const [_target, event] = _.maxBy(events, ([_, { castAt }]) => castAt);
+          const key = new RowKey(action, source);
+          const elapsed = (this.props.serverTime - event.castAt) / 1000;
 
-        if (elapsed < duration) {
-          state = "active";
-          timer = Math.max(0, duration - elapsed);
-          percentage = timer / duration;
-        } else {
-          state = "cooldown";
-          timer = Math.max(0, cooldown - elapsed);
-          percentage = elapsed / cooldown;
+          let state, timer, percentage;
+
+          if (elapsed < duration) {
+            state = "active";
+            timer = Math.max(0, duration - elapsed);
+            percentage = timer / duration;
+          } else {
+            state = "cooldown";
+            timer = Math.max(0, cooldown - elapsed);
+            percentage = elapsed / cooldown;
+          }
+
+          const subText =
+            state === "active"
+              ? targeting !== Target.Many
+                ? event.target
+                : null
+              : null;
+
+          const icon = ActionIcon.get(action);
+
+          timers.push({
+            key,
+            state,
+            timer,
+            percentage,
+            icon,
+            job,
+            subText,
+            ...event,
+          });
         }
-
-        const subText =
-          state === "active"
-            ? targeting !== Target.Many
-              ? event.target
-              : null
-            : null;
-
-        const icon = ActionIcon.get(action);
-
-        timers.push({
-          key,
-          state,
-          timer,
-          percentage,
-          icon,
-          job,
-          subText,
-          ...event,
-        });
       }
     }
 
@@ -240,9 +260,13 @@ class Timers extends React.Component {
     ];
 
     return (
-      <div className="damage-meter">
+      <div className="timers">
         {_.sortBy(timers, ...ranking).map((timer) => (
-          <Timer key={timer.key} {...timer} />
+          <Timer
+            key={timer.key.toString()}
+            dismiss={() => this.props.dismissRow(timer.key)}
+            {...timer}
+          />
         ))}
       </div>
     );
@@ -330,8 +354,22 @@ class App extends React.Component {
     if (handler) handler();
   }
 
+  dismissRow({ actionID, sourceID }) {
+    this.setState({
+      actions: this.state.actions.update(actionID, (byAction) =>
+        byAction.update(sourceID, (_) => new Map())
+      ),
+    });
+  }
+
   render() {
-    return <Timers {...this.state} />;
+    return (
+      <Timers
+        dismissRow={(key) => this.dismissRow(key)}
+        serverTime={this.state.serverTime}
+        actions={this.state.actions}
+      />
+    );
   }
 }
 
