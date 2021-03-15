@@ -52,6 +52,5 @@ cd releases/dev && python -m http.server
 - timers: if possible, reset the state when a wipe happens
 - timers: show how many targets multi-target actions hit
 - timers: more distinct effect when a buff window starts
-- timers: collect old target garbage
 - meta: bundle the JS to make versioning easier
 - meta: do a pass to clean up CSS

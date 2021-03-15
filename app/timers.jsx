@@ -1,5 +1,6 @@
 const _ = window._;
 const React = window.React;
+
 const Scope = { Friendly: 0, Enemy: 1 };
 const Target = { Self: 0, Single: 1, Many: 2 };
 
@@ -9,6 +10,15 @@ const bound = (x, { min, max }) => Math.min(max, Math.max(min, x));
 Map.prototype.update = function (key, f) {
   const x = f(this.get(key));
   return new Map(this).set(key, x);
+};
+
+// Functional filtering for maps
+Map.prototype.filter = function (f) {
+  const m = new Map();
+  for (let [key, value] of this.entries()) {
+    if (f(value)) m.set(key, value);
+  }
+  return m;
 };
 
 const DATA0 = {
@@ -343,15 +353,21 @@ class App extends React.Component {
   onCast(sourceID, sourceName, actionID, actionName, targetID, targetName) {
     actionID = parseInt(actionID, 16);
     if (actionID in DATA) {
+      const { cooldown } = DATA[actionID];
+      const { serverTime } = this.state;
       const payload = {
         source: sourceName,
         action: actionName,
         target: targetName,
-        castAt: this.state.serverTime,
+        castAt: serverTime,
       };
       const key = TimerKey.for(actionID, sourceID);
       const tracking = this.state.tracking.update(key, (targets) =>
-        (targets ?? new Map()).update(targetID, (_) => payload)
+        (targets ?? new Map())
+          // Since this is a new cast, we can evict anything that has been
+          // around longer than the cooldown
+          .filter(({ castAt }) => serverTime - castAt < cooldown * 1000)
+          .update(targetID, (_) => payload)
       );
       this.setState({ tracking });
     }
