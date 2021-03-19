@@ -535,25 +535,31 @@ class App extends React.Component {
       const data = fset(getRecord(sourceName), "castStart", null);
       applyUpdate(sourceName, data);
     } else if (code === "21" || code === "22") {
-      // Action used: if you were casting, you get credit for the duration of
-      // that cast or `GCD`, whichever is greater. If you weren't casting, you
-      // get `GCD` worth of uptime credited to you. In either case, if `GCD` has
-      // not elapsed since your previous credit time, the next credit is reduced
-      // so as not to double-credit. Example: if I use an action at time t then
-      // another at t+1s, I would get 3.5s total uptime credit. This is a best
-      // approximation with the information we have available.
+      // Action used
       const [_sourceID, sourceName] = message;
       const { castStart, lastCredit, uptime } = getRecord(sourceName);
-      const wasCasting = castStart !== null;
 
+      // If you were casting, you get credit for the duration of that cast or
+      // `GCD`, whichever is greater. If you weren't casting, you get `GCD`
+      // worth of uptime credited to you. In both cases, we can't tell how much
+      // your GCD is due to spell/skill speed.
+      const wasCasting = castStart !== null;
       const uptimeCredit = wasCasting
         ? Math.max(GCD, serverTime - castStart)
         : GCD;
-      const uptimeOvercredit = Math.max(0, GCD - (serverTime - lastCredit));
+      const creditTime = wasCasting ? castStart : serverTime;
+
+      // However, in either case, if `GCD` has not elapsed between the two
+      // credit times, the next credit is reduced so as not to double-credit.
+      // Example: if I use an action at time t then another at t+1s, I would get
+      // 3.5s total uptime credit. Another example: if I cast two 2s spells back
+      // to back, I will get 4.5s of credit. This is a best approximation with
+      // the information we have available.
+      const uptimeOvercredit = Math.max(0, GCD - (creditTime - lastCredit));
 
       applyUpdate(sourceName, {
         castStart: null,
-        lastCredit: wasCasting ? castStart : serverTime,
+        lastCredit: creditTime,
         uptime: uptime + uptimeCredit - uptimeOvercredit,
       });
     }
