@@ -475,11 +475,15 @@ class App extends React.Component {
 
   onOverlayDataUpdate(e) {
     const currentEncounter = e.detail;
+    // Encounters without combatants can be nearby pulls in public areas that
+    // you aren't involved in. Drop those updates unless they include someone.
+    if (_.isEmpty(currentEncounter.Combatant)) return;
+
     let history = this.state.history;
     let selectedEncounter = this.state.selectedEncounter;
     let actionTracking = this.state.actionTracking;
 
-    const isActive = (enc) => enc !== null && enc.isActive === "true";
+    const isActive = (enc) => enc?.isActive === "true";
 
     // Encounter started
     if (!isActive(this.state.currentEncounter) && isActive(currentEncounter)) {
@@ -506,9 +510,12 @@ class App extends React.Component {
   }
 
   onLogLine(e) {
+    // If we aren't in an encounter, don't calculate uptime
+    if (this.state.currentEncounter?.isActive !== "true") return;
+
     const [code, timestamp, ...message] = JSON.parse(e.detail);
     // Sometimes the log lines go backwards in time, though I think this is
-    // unlikely within a given code.
+    // impossible within the codes we use.
     const serverTime = Math.max(this.state.serverTime, new Date(timestamp));
 
     const getRecord = (sourceName) =>
