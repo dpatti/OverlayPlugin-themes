@@ -475,6 +475,7 @@ class LogData {
 
 class App extends React.Component {
   static HISTORY_KEY = "meters";
+  static PLAYER_NAME_KEY = "playerName";
 
   constructor(props) {
     super(props);
@@ -499,8 +500,7 @@ class App extends React.Component {
     );
 
     try {
-      const playerName =
-        localStorage.getItem(App.PLAYER_NAME_KEY) ?? options.you;
+      const playerName = localStorage.getItem(App.PLAYER_NAME_KEY);
       if (playerName) {
         this.setState({ playerName });
       }
