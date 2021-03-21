@@ -7,7 +7,10 @@ URL: <https://dpatti.github.io/ffxiv-overlay/releases/dev/>
 * Shows limit break and other sources
 * New, cleaner class icons
 * Resets view to new encounter when it starts
-* Added new views for deaths and a very crude uptime view
+* Added new views for deaths and uptime
+* Automatically tracks the player's name and replaces "YOU"
+* Displays total encounter time instead of ACT's combat time
+* Filters out encounters with no combatants
 
 ### v2
 
