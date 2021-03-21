@@ -34,7 +34,7 @@ const options = ((search) => {
 })(document.location.search);
 
 // helper to functionally set a key in an object by returning a new copy
-const fset = (obj, key, value) => _.defaults({ [key]: value }, obj);
+const fset = (obj, extensions) => _.defaults(extensions, obj);
 
 const formatName = (name) => {
   if (name == YOU) {
@@ -433,6 +433,46 @@ class Debugger extends React.Component {
   }
 }
 
+class LogData {
+  static startNew({ encounterStart }) {
+    return new this({
+      encounterStart,
+      lastServerTime: encounterStart,
+      activity: {},
+    });
+  }
+
+  constructor(attrs) {
+    Object.assign(this, attrs);
+  }
+
+  encounterDuration() {
+    return this.lastServerTime - this.encounterStart;
+  }
+
+  uptimeFor(name) {
+    return this.activity[name]?.uptime ?? 0;
+  }
+
+  updateTime(serverTime) {
+    return new this.constructor(fset(this, { lastServerTime: serverTime }));
+  }
+
+  updateActivity(sourceName, f) {
+    const record = this.activity[sourceName] ?? {
+      castStart: null,
+      lastCredit: new Date(0),
+      uptime: 0,
+    };
+
+    return new this.constructor(
+      fset(this, {
+        activity: fset(this.activity, { [sourceName]: f(record) }),
+      })
+    );
+  }
+}
+
 class App extends React.Component {
   static HISTORY_KEY = "meters";
 
@@ -443,8 +483,7 @@ class App extends React.Component {
       currentEncounter: null,
       history: [],
       selectedEncounter: null,
-      actionTracking: {},
-      encounterStart: null,
+      rollingLogData: null,
       serverTime: new Date(0),
       lastLogLine: null,
     };
@@ -492,19 +531,29 @@ class App extends React.Component {
     let { history } = this.state;
 
     const isActive = (enc) => enc?.isActive === "true";
+    const duration = (enc) => enc?.Encounter?.DURATION;
 
     // Encounter started
     if (!isActive(this.state.currentEncounter) && isActive(currentEncounter)) {
-      const lastUpdateDelta = performance.now() - this.state.lastLogLine;
+      const updateLag = performance.now() - this.state.lastLogLine;
       this.setState({
-        encounterStart: this.state.serverTime + lastUpdateDelta,
-        selectedEncounter: null,
-        actionTracking: {},
+        rollingLogData: LogData.startNew({
+          encounterStart: this.state.serverTime + updateLag,
+        }),
       });
     }
 
-    // Mutates encounter
-    this.embellish(currentEncounter);
+    // Only use our latest log data if the encounter's timer advanced. It's
+    // possible that testing `isActive` is the right way to do this instead. The
+    // idea is that if we get data updates after the encounter is over, the last
+    // log data we applied is the most semantically correct one.
+    const logData =
+      duration(this.state.currentEncounter) === duration(currentEncounter) &&
+      this.state.currentEncounter.logData !== null
+        ? this.state.currentEncounter.logData
+        : this.state.rollingLogData;
+    // This could be null if you reloaded the overlay mid-combat.
+    if (logData !== null) this.embellish(currentEncounter, logData);
 
     // Encounter ended
     if (isActive(this.state.currentEncounter) && !isActive(currentEncounter)) {
@@ -530,29 +579,16 @@ class App extends React.Component {
     const serverTime = Math.max(this.state.serverTime, new Date(timestamp));
     const lastLogLine = performance.now();
 
-    const getRecord = (sourceName) =>
-      this.state.actionTracking[sourceName] ?? {
-        castStart: null,
-        lastCredit: new Date(0),
-        uptime: 0,
-      };
+    const applyUpdate = (sourceName, f) => {
+      this.setState({ serverTime, lastLogLine });
 
-    // If we aren't in an encounter, don't calculate uptime but keep the clock
-    // up to date.
-    if (this.state.currentEncounter?.isActive !== "true") {
-      this.setState({
-        serverTime,
-        lastLogLine,
-      });
-      return;
-    }
-
-    const applyUpdate = (sourceName, data) => {
-      this.setState({
-        serverTime,
-        lastLogLine,
-        actionTracking: fset(this.state.actionTracking, sourceName, data),
-      });
+      if (this.state.rollingLogData !== null) {
+        let rollingLogData = this.state.rollingLogData.updateTime(serverTime);
+        if (sourceName !== undefined) {
+          rollingLogData = rollingLogData.updateActivity(sourceName, f);
+        }
+        this.setState({ rollingLogData });
+      }
     };
 
     if (code === "02") {
@@ -561,41 +597,41 @@ class App extends React.Component {
     } else if (code === "20") {
       // Start casting
       const [_sourceID, sourceName] = message;
-      const data = fset(getRecord(sourceName), "castStart", serverTime);
-      applyUpdate(sourceName, data);
+      applyUpdate(sourceName, (data) => fset(data, { castStart: serverTime }));
     } else if (code === "23") {
       // Cancelled cast
       const [_sourceID, sourceName] = message;
-      const data = fset(getRecord(sourceName), "castStart", null);
-      applyUpdate(sourceName, data);
+      applyUpdate(sourceName, (data) => fset(data, { castStart: null }));
     } else if (code === "21" || code === "22") {
       // Action used
       const [_sourceID, sourceName] = message;
-      const { castStart, lastCredit, uptime } = getRecord(sourceName);
+      applyUpdate(sourceName, ({ castStart, lastCredit, uptime }) => {
+        // If you were casting, you get credit for the duration of that cast or
+        // `GCD`, whichever is greater. If you weren't casting, you get `GCD`
+        // worth of uptime credited to you. In both cases, we can't tell how much
+        // your GCD is due to spell/skill speed.
+        const wasCasting = castStart !== null;
+        const uptimeCredit = wasCasting
+          ? Math.max(GCD, serverTime - castStart)
+          : GCD;
+        const creditTime = wasCasting ? castStart : serverTime;
 
-      // If you were casting, you get credit for the duration of that cast or
-      // `GCD`, whichever is greater. If you weren't casting, you get `GCD`
-      // worth of uptime credited to you. In both cases, we can't tell how much
-      // your GCD is due to spell/skill speed.
-      const wasCasting = castStart !== null;
-      const uptimeCredit = wasCasting
-        ? Math.max(GCD, serverTime - castStart)
-        : GCD;
-      const creditTime = wasCasting ? castStart : serverTime;
+        // However, in either case, if `GCD` has not elapsed between the two
+        // credit times, the next credit is reduced so as not to double-credit.
+        // Example: if I use an action at time t then another at t+1s, I would get
+        // 3.5s total uptime credit. Another example: if I cast two 2s spells back
+        // to back, I will get 4.5s of credit. This is a best approximation with
+        // the information we have available.
+        const uptimeOvercredit = Math.max(0, GCD - (creditTime - lastCredit));
 
-      // However, in either case, if `GCD` has not elapsed between the two
-      // credit times, the next credit is reduced so as not to double-credit.
-      // Example: if I use an action at time t then another at t+1s, I would get
-      // 3.5s total uptime credit. Another example: if I cast two 2s spells back
-      // to back, I will get 4.5s of credit. This is a best approximation with
-      // the information we have available.
-      const uptimeOvercredit = Math.max(0, GCD - (creditTime - lastCredit));
-
-      applyUpdate(sourceName, {
-        castStart: null,
-        lastCredit: creditTime,
-        uptime: uptime + uptimeCredit - uptimeOvercredit,
+        return {
+          castStart: null,
+          lastCredit: creditTime,
+          uptime: uptime + uptimeCredit - uptimeOvercredit,
+        };
       });
+    } else if (serverTime > this.state.serverTime) {
+      applyUpdate();
     }
   }
 
@@ -611,13 +647,9 @@ class App extends React.Component {
     }
   }
 
-  embellish(data) {
-    const {
-      serverTime,
-      playerName,
-      actionTracking,
-      encounterStart,
-    } = this.state;
+  embellish(data, logData) {
+    const { playerName } = this.state;
+    data.logData = logData;
 
     if (playerName && YOU in data.Combatant) {
       data.Combatant[YOU].isSelf = true;
@@ -625,16 +657,13 @@ class App extends React.Component {
       delete data.Combatant[YOU];
     }
 
-    const encounterDuration = serverTime - encounterStart;
     // This is different from the encounter's notion of duration because ACT
     // may be configured to trim out periods of inactivity.
+    const encounterDuration = logData.encounterDuration();
     data.Encounter.durationTotal = encounterDuration;
 
     for (let name in data.Combatant) {
-      let uptime = actionTracking[name]?.uptime ?? 0;
-      // We're using ACT's notion of encounter here, which might trim downtime,
-      // but that should be a good upper bound still.
-
+      let uptime = logData.uptimeFor(name);
       _.assign(data.Combatant[name], {
         uptime,
         ["uptime%"]: Math.min(1, uptime / encounterDuration),
