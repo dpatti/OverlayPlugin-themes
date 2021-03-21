@@ -4,6 +4,10 @@
 
 URL: <https://dpatti.github.io/ffxiv-overlay/releases/dev/>
 
+### v4
+
+URL: <https://dpatti.github.io/ffxiv-overlay/releases/v4/>
+
 * Added new view for uptime based on action use
 * Automatically tracks the player's name and replaces "YOU"
 * Displays total encounter time instead of ACT's combat time
