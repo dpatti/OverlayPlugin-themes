@@ -4,9 +4,14 @@
 
 URL: <https://dpatti.github.io/ffxiv-overlay/releases/dev/>
 
+### v3
+
+URL: <https://dpatti.github.io/ffxiv-overlay/releases/v3/>
+
 * Shows limit break and other sources
 * New, cleaner class icons
 * Resets view to new encounter when it starts
+* Added new view for deaths
 
 ### v2
 
