@@ -656,6 +656,7 @@ class App extends React.Component {
 
     if (playerName && YOU in data.Combatant) {
       data.Combatant[YOU].isSelf = true;
+      data.Combatant[YOU].name = playerName;
       data.Combatant[this.state.playerName] = data.Combatant[YOU];
       delete data.Combatant[YOU];
     }
