@@ -310,13 +310,16 @@ class Combatants extends React.Component {
             [View.Healing]: {
               format: formatNumber,
               total: combatant.healed,
-              note: combatant.OverHealPct,
+              note: `${combatant.OverHealPct} OH`,
               extra: [formatNumber(combatant.enchps), combatant["healed%"]],
             },
             [View.Tanking]: {
               format: formatNumber,
               total: combatant.damagetaken,
-              extra: [combatant.ParryPct, combatant.BlockPct],
+              extra: [
+                `${combatant.ParryPct} parry`,
+                `${combatant.BlockPct} block`,
+              ],
             },
             [View.Uptime]: {
               format: formatSpan,
