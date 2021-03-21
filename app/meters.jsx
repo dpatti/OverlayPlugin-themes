@@ -540,6 +540,7 @@ class App extends React.Component {
     if (!isActive(this.state.currentEncounter) && isActive(currentEncounter)) {
       const updateLag = performance.now() - this.state.lastLogLine;
       this.setState({
+        selectedEncounter: null,
         rollingLogData: LogData.startNew({
           encounterStart: this.state.serverTime + updateLag,
         }),
