@@ -28,7 +28,7 @@ const options = ((search) => {
   }
 
   return {
-    you: options.you || YOU,
+    you: options.you.replace(/_/g, " ") || YOU,
     debug: "debug" in options || false,
   };
 })(document.location.search);
@@ -38,13 +38,16 @@ const fset = (obj, key, value) => _.defaults({ [key]: value }, obj);
 
 const formatName = (name) => {
   if (name == YOU) {
-    return options.you.replace(/_/g, " ");
+    return options.you;
   } else {
     return name;
   }
 };
 
-const formatEncounter = (enc) => `${enc.title} (${enc.duration})`;
+const formatEncounter = (enc) =>
+  enc.durationTotal
+    ? `${enc.title} (${formatSpan(enc.durationTotal)})`
+    : `${enc.title} (${enc.duration})`;
 
 const formatNumber = (number) => {
   number = parseFloat(number);
@@ -288,7 +291,6 @@ class Combatants extends React.Component {
 
     const rows = _.take(this.props.combatants, maxRows).map(
       (combatant, rank) => {
-        const isSelf = combatant.name === YOU || combatant.name === "You";
         const actor =
           combatant.name === LIMIT_BREAK ? "lb" : combatant.Job.toLowerCase();
 
@@ -297,6 +299,7 @@ class Combatants extends React.Component {
             actor,
             job: combatant.Job || "",
             characterName: combatant.name,
+            isSelf: combatant.isSelf,
           },
           {
             [View.Damage]: {
@@ -333,8 +336,6 @@ class Combatants extends React.Component {
         return (
           <CombatantCompact
             rank={rank + 1}
-            data={combatant}
-            isSelf={isSelf}
             key={combatant.name}
             max={max}
             {...stats}
@@ -433,16 +434,19 @@ class Debugger extends React.Component {
 }
 
 class App extends React.Component {
-  static STORAGE_KEY = "meters";
+  static HISTORY_KEY = "meters";
 
   constructor(props) {
     super(props);
     this.state = {
+      playerName: null,
       currentEncounter: null,
       history: [],
       selectedEncounter: null,
       actionTracking: {},
+      encounterStart: null,
       serverTime: new Date(0),
+      lastLogLine: null,
     };
   }
 
@@ -456,9 +460,15 @@ class App extends React.Component {
     );
 
     try {
-      const stored = JSON.parse(localStorage.getItem(App.STORAGE_KEY));
-      if (stored) {
-        this.setState({ currentEncounter: stored[0], history: stored });
+      const playerName =
+        localStorage.getItem(App.PLAYER_NAME_KEY) ?? options.you;
+      if (playerName) {
+        this.setState({ playerName });
+      }
+
+      const history = JSON.parse(localStorage.getItem(App.HISTORY_KEY));
+      if (history) {
+        this.setState({ currentEncounter: history[0], history: history });
       }
     } catch (ex) {
       console.error(`Couldn't load state: ${ex}`);
@@ -479,44 +489,46 @@ class App extends React.Component {
     // you aren't involved in. Drop those updates unless they include someone.
     if (_.isEmpty(currentEncounter.Combatant)) return;
 
-    let history = this.state.history;
-    let selectedEncounter = this.state.selectedEncounter;
-    let actionTracking = this.state.actionTracking;
+    let { history } = this.state;
 
     const isActive = (enc) => enc?.isActive === "true";
 
     // Encounter started
     if (!isActive(this.state.currentEncounter) && isActive(currentEncounter)) {
-      selectedEncounter = null;
-      actionTracking = {};
+      const lastUpdateDelta = performance.now() - this.state.lastLogLine;
+      this.setState({
+        encounterStart: this.state.serverTime + lastUpdateDelta,
+        selectedEncounter: null,
+        actionTracking: {},
+      });
     }
 
     // Mutates encounter
-    this.embellish(currentEncounter, actionTracking);
+    this.embellish(currentEncounter);
 
     // Encounter ended
     if (isActive(this.state.currentEncounter) && !isActive(currentEncounter)) {
       history = [currentEncounter].concat(history).slice(0, 10);
 
-      localStorage.setItem(App.STORAGE_KEY, JSON.stringify(history));
+      localStorage.setItem(App.HISTORY_KEY, JSON.stringify(history));
     }
 
-    this.setState({
-      currentEncounter,
-      history,
-      selectedEncounter,
-      actionTracking,
-    });
+    this.setState({ currentEncounter, history });
+  }
+
+  setPlayerName(playerName) {
+    if (playerName && playerName !== this.state.playerName) {
+      localStorage.setItem(App.PLAYER_NAME_KEY, playerName);
+      this.setState({ playerName });
+    }
   }
 
   onLogLine(e) {
-    // If we aren't in an encounter, don't calculate uptime
-    if (this.state.currentEncounter?.isActive !== "true") return;
-
     const [code, timestamp, ...message] = JSON.parse(e.detail);
     // Sometimes the log lines go backwards in time, though I think this is
     // impossible within the codes we use.
     const serverTime = Math.max(this.state.serverTime, new Date(timestamp));
+    const lastLogLine = performance.now();
 
     const getRecord = (sourceName) =>
       this.state.actionTracking[sourceName] ?? {
@@ -525,13 +537,28 @@ class App extends React.Component {
         uptime: 0,
       };
 
-    const applyUpdate = (sourceName, data) =>
+    // If we aren't in an encounter, don't calculate uptime but keep the clock
+    // up to date.
+    if (this.state.currentEncounter?.isActive !== "true") {
       this.setState({
         serverTime,
+        lastLogLine,
+      });
+      return;
+    }
+
+    const applyUpdate = (sourceName, data) => {
+      this.setState({
+        serverTime,
+        lastLogLine,
         actionTracking: fset(this.state.actionTracking, sourceName, data),
       });
+    };
 
-    if (code === "20") {
+    if (code === "02") {
+      const [_playerID, playerName] = message;
+      this.setPlayerName(playerName);
+    } else if (code === "20") {
       // Start casting
       const [_sourceID, sourceName] = message;
       const data = fset(getRecord(sourceName), "castStart", serverTime);
@@ -584,14 +611,29 @@ class App extends React.Component {
     }
   }
 
-  embellish(data, actionTracking) {
-    // This won't work for "YOU" unless you specify your player name
+  embellish(data) {
+    const {
+      serverTime,
+      playerName,
+      actionTracking,
+      encounterStart,
+    } = this.state;
+
+    if (playerName && YOU in data.Combatant) {
+      data.Combatant[YOU].isSelf = true;
+      data.Combatant[this.state.playerName] = data.Combatant[YOU];
+      delete data.Combatant[YOU];
+    }
+
+    const encounterDuration = serverTime - encounterStart;
+    // This is different from the encounter's notion of duration because ACT
+    // may be configured to trim out periods of inactivity.
+    data.Encounter.durationTotal = encounterDuration;
+
     for (let name in data.Combatant) {
-      let sourceName = formatName(name);
-      let uptime = actionTracking[sourceName]?.uptime ?? 0;
+      let uptime = actionTracking[name]?.uptime ?? 0;
       // We're using ACT's notion of encounter here, which might trim downtime,
       // but that should be a good upper bound still.
-      let encounterDuration = parseInt(data.Encounter.DURATION) * 1000;
 
       _.assign(data.Combatant[name], {
         uptime,
