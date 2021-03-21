@@ -28,7 +28,7 @@ const options = ((search) => {
   }
 
   return {
-    you: options.you.replace(/_/g, " ") || YOU,
+    you: options.you?.replace(/_/g, " ") || YOU,
     debug: "debug" in options || false,
   };
 })(document.location.search);
@@ -388,7 +388,7 @@ class DamageMeter extends React.Component {
       [View.Deaths]: "deaths",
     }[this.state.currentView];
 
-    const self = encounter.Combatant.YOU;
+    const self = encounter.Combatant[this.props.playerName ?? YOU];
 
     const combatants = _.sortBy(
       _.filter(encounter.Combatant, (d) => parseInt(d[stat]) > 0),
@@ -677,6 +677,7 @@ class App extends React.Component {
         data={this.state.selectedEncounter ?? this.state.currentEncounter}
         history={this.state.history}
         onSelectEncounter={(index) => this.onSelectEncounter(index)}
+        playerName={this.state.playerName}
       />
     ) : (
       <h3>Awaiting data.</h3>
