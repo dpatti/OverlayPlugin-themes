@@ -6,7 +6,8 @@
       {
         "targets": { "chrome": "75" }
       }
-    ]
+    ],
+    "@babel/preset-typescript"
   ],
   "plugins": [
     "@babel/transform-react-jsx",

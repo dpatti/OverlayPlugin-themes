@@ -6,7 +6,66 @@ const GCD = 2500;
 const LIMIT_BREAK = "Limit Break";
 const YOU = "YOU";
 
-const View = {
+interface StateUpdate {
+  isLocked: boolean;
+}
+
+interface DataUpdate {
+  Encounter: Encounter;
+  Combatant: { [name: string]: Combatant };
+  isActive: "true" | "false";
+}
+
+interface DataUpdateEmbellished extends DataUpdate {
+  Encounter: EncounterEmbellished;
+  Combatant: { [name: string]: CombatantEmbellished };
+  logData: LogData | null;
+}
+
+type LogLine = string;
+
+interface Encounter {
+  title: string;
+  duration: string;
+  DURATION: string;
+  encdps: string;
+  enchps: string;
+  deaths: string;
+}
+
+interface EncounterEmbellished extends Encounter {
+  durationTotal: number;
+}
+
+interface Combatant {
+  name: string;
+  Job: string;
+  ["crithit%"]: string;
+  DirectHitPct: string;
+  CritDirectHitPct: string;
+  ["critheal%"]: string;
+  damage: string;
+  encdps: string;
+  ["damage%"]: string;
+  enchps: string;
+  ["healed%"]: string;
+  OverHealPct: string;
+  healed: string;
+  damagetaken: string;
+  ParryPct: string;
+  BlockPct: string;
+  deaths: string;
+}
+
+interface CombatantEmbellished extends Combatant {
+  uptime: number;
+  ["uptime%"]: number;
+  isSelf: boolean;
+}
+
+// XXX: enum
+type View = "Damage" | "Healing" | "Tanking" | "Uptime" | "Deaths";
+const View: { [key: string]: View } = {
   Damage: "Damage",
   Healing: "Healing",
   Tanking: "Tanking",
@@ -15,7 +74,9 @@ const View = {
 };
 
 const options = ((search) => {
-  let options = {};
+  type dict = { [key: string]: string };
+
+  let options: dict = {};
 
   if (search[0] === "?") {
     search
@@ -34,9 +95,10 @@ const options = ((search) => {
 })(document.location.search);
 
 // helper to functionally set a key in an object by returning a new copy
-const fset = (obj, extensions) => _.defaults(extensions, obj);
+const fset = <A, B>(obj: A, extensions: B): A & B =>
+  _.defaults(extensions, obj);
 
-const formatName = (name) => {
+const formatName = (name: string) => {
   if (name == YOU) {
     return options.you;
   } else {
@@ -44,13 +106,14 @@ const formatName = (name) => {
   }
 };
 
-const formatEncounter = (enc) =>
+const formatEncounter = (enc: EncounterEmbellished) =>
   enc.durationTotal
     ? `${enc.title} (${formatSpan(enc.durationTotal)})`
     : `${enc.title} (${enc.duration})`;
 
-const formatNumber = (number) => {
-  number = parseFloat(number);
+const formatNumber = (number: number | string) => {
+  // XXX: coersion
+  number = parseFloat(number as string);
 
   if (number >= 1000000) {
     return (number / 1000000).toFixed(2) + "M";
@@ -61,21 +124,42 @@ const formatNumber = (number) => {
   return number.toFixed(2);
 };
 
-const formatPercent = (number) => `${(number * 100).toFixed(0)}%`;
+const formatPercent = (number: number) => `${(number * 100).toFixed(0)}%`;
 
-const formatSpan = (ms) => {
+const formatSpan = (ms: number) => {
   const seconds = ms / 1000;
   const min = Math.floor(seconds / 60);
   const sec = (Math.abs(seconds) % 60).toFixed(0);
   return `${min}:${("0" + sec).slice(-2)}`;
 };
 
-class CombatantCompact extends React.Component {
-  render() {
-    const width =
-      Math.min(100, parseInt((this.props.total / this.props.max) * 100)) + "%";
+// XXX: namespace
+interface CombatantCompactProps {
+  total: number;
+  max: number;
+  actor: string;
+  isSelf: boolean;
+  format: (_: number) => string;
+  note?: string;
+  extra: Array<string>;
+  rank: number;
+  characterName: string;
+  job: string;
+}
 
-    return this.props.perSecond === "---" ? null : (
+class CombatantCompact extends React.Component<CombatantCompactProps, {}> {
+  render() {
+    // XXX: coersion
+    const width =
+      ((Math.min(
+        100,
+        parseInt(
+          (((this.props.total / this.props.max) * 100) as unknown) as string
+        )
+      ) as unknown) as string) + "%";
+
+    // XXX: coersion
+    return (this.props as any).perSecond === "---" ? null : (
       <li
         className={`row ${this.props.actor} ${this.props.isSelf ? "self" : ""}`}
       >
@@ -104,8 +188,18 @@ class CombatantCompact extends React.Component {
   }
 }
 
-class Stats extends React.Component {
-  constructor(props) {
+// XXX: namespace
+interface StatsProps {
+  encounter: any;
+  self: CombatantEmbellished;
+}
+
+interface StatsState {
+  group: boolean;
+}
+
+class Stats extends React.Component<StatsProps, StatsState> {
+  constructor(props: StatsProps) {
     super(props);
     this.state = {
       group: true,
@@ -122,7 +216,11 @@ class Stats extends React.Component {
     const self = this.props.self;
     const dataSource = this.state.group || !self ? this.props.encounter : self;
 
-    const Stat = (props) =>
+    const Stat: React.FunctionComponent<{
+      label: string;
+      value?: string;
+      self?: boolean;
+    }> = (props) =>
       props.value && (!props.self || !this.state.group) ? (
         <div className="cell">
           <span className="label ff-header">{props.label}</span>
@@ -175,8 +273,23 @@ class Stats extends React.Component {
   }
 }
 
-class Header extends React.Component {
-  constructor(props) {
+// XXX: namespace
+interface HeaderProps {
+  encounter: EncounterEmbellished;
+  onSelectEncounter: (index: number | null) => void;
+  currentView: View;
+  history: Array<DataUpdateEmbellished>;
+  onViewChange: () => void;
+  self: CombatantEmbellished;
+}
+
+interface HeaderState {
+  expanded: boolean;
+  showEncountersList: boolean;
+}
+
+class Header extends React.Component<HeaderProps, HeaderState> {
+  constructor(props: HeaderProps) {
     super(props);
     this.state = {
       expanded: false,
@@ -184,7 +297,7 @@ class Header extends React.Component {
     };
   }
 
-  shouldComponentUpdate(nextProps) {
+  shouldComponentUpdate(nextProps: HeaderProps) {
     // Will need to add a null check here if we are swapping betwen self and
     // group. Possibly more null checks as well.
     if (nextProps.encounter.encdps === "---") {
@@ -206,7 +319,7 @@ class Header extends React.Component {
     });
   }
 
-  onSelectEncounter(index) {
+  onSelectEncounter(index: number | null) {
     this.toggleEncounterMenu(false);
     this.props.onSelectEncounter(index);
   }
@@ -275,8 +388,14 @@ class Header extends React.Component {
   }
 }
 
-class Combatants extends React.Component {
-  shouldComponentUpdate(nextProps) {
+// XXX: namespace
+interface CombatantsProps {
+  combatants: Array<CombatantEmbellished>;
+  currentView: View;
+}
+
+class Combatants extends React.Component<CombatantsProps> {
+  shouldComponentUpdate(nextProps: CombatantsProps) {
     // if data is empty then don't re-render
     if (Object.getOwnPropertyNames(nextProps.combatants).length === 0) {
       return false;
@@ -287,7 +406,7 @@ class Combatants extends React.Component {
 
   render() {
     const maxRows = 12;
-    let max;
+    let max: number;
 
     const rows = _.take(this.props.combatants, maxRows).map(
       (combatant, rank) => {
@@ -304,18 +423,30 @@ class Combatants extends React.Component {
           {
             [View.Damage]: {
               format: formatNumber,
-              total: combatant.damage,
-              extra: [formatNumber(combatant.encdps), combatant["damage%"]],
+              // XXX: coersion
+              total: (combatant.damage as unknown) as number,
+              extra: [
+                // XXX: coersion
+                formatNumber((combatant.encdps as unknown) as number),
+                combatant["damage%"],
+              ],
             },
             [View.Healing]: {
               format: formatNumber,
-              total: combatant.healed,
+              // XXX: coersion
+              total: (combatant.healed as unknown) as number,
               note: `${combatant.OverHealPct} OH`,
-              extra: [formatNumber(combatant.enchps), combatant["healed%"]],
+              extra: [
+                // XXX: coersion
+
+                formatNumber((combatant.enchps as unknown) as number),
+                combatant["healed%"],
+              ],
             },
             [View.Tanking]: {
               format: formatNumber,
-              total: combatant.damagetaken,
+              // XXX: coersion
+              total: (combatant.damagetaken as unknown) as number,
               extra: [
                 `${combatant.ParryPct} parry`,
                 `${combatant.BlockPct} block`,
@@ -328,7 +459,8 @@ class Combatants extends React.Component {
             },
             [View.Deaths]: {
               format: _.identity,
-              total: combatant.deaths,
+              // XXX: coersion
+              total: (combatant.deaths as unknown) as number,
               extra: [],
             },
           }[this.props.currentView]
@@ -351,15 +483,30 @@ class Combatants extends React.Component {
   }
 }
 
-class DamageMeter extends React.Component {
-  constructor(props) {
+// XXX: namespace
+interface DamageMeterProps {
+  data: DataUpdateEmbellished;
+  playerName: string | null;
+  history: Array<DataUpdateEmbellished>;
+  onSelectEncounter: (index: number | null) => void;
+}
+
+interface DamageMeterState {
+  currentView: View;
+}
+
+class DamageMeter extends React.Component<DamageMeterProps, DamageMeterState> {
+  constructor(props: DamageMeterProps) {
     super(props);
     this.state = {
       currentView: View.Damage,
     };
   }
 
-  shouldComponentUpdate(nextProps, nextState) {
+  shouldComponentUpdate(
+    nextProps: DamageMeterProps,
+    nextState: DamageMeterState
+  ) {
     if (nextProps.data.Encounter.encdps === "---") {
       return false;
     }
@@ -376,7 +523,7 @@ class DamageMeter extends React.Component {
     const index = views.indexOf(this.state.currentView);
 
     this.setState({
-      currentView: views[(index + 1) % views.length],
+      currentView: views[(index + 1) % views.length] as View,
     });
   }
 
@@ -389,13 +536,15 @@ class DamageMeter extends React.Component {
       [View.Tanking]: "damagetaken",
       [View.Uptime]: "uptime",
       [View.Deaths]: "deaths",
-    }[this.state.currentView];
+    }[this.state.currentView] as keyof Combatant;
 
     const self = encounter.Combatant[this.props.playerName ?? YOU];
 
     const combatants = _.sortBy(
-      _.filter(encounter.Combatant, (d) => parseInt(d[stat]) > 0),
-      (d) => -parseInt(d[stat])
+      // XXX: coersion
+      _.filter(encounter.Combatant, (d) => parseInt(d[stat] as string) > 0),
+      // XXX: coersion
+      (d) => -parseInt(d[stat] as string)
     );
 
     return (
@@ -422,8 +571,13 @@ class DamageMeter extends React.Component {
   }
 }
 
-class Debugger extends React.Component {
-  constructor(props) {
+// XXX: namespace
+interface DebuggerProps {
+  data: DataUpdateEmbellished;
+}
+
+class Debugger extends React.Component<DebuggerProps, {}> {
+  constructor(props: DebuggerProps) {
     super(props);
   }
 
@@ -436,8 +590,38 @@ class Debugger extends React.Component {
   }
 }
 
-class LogData {
-  static startNew({ encounterStart }) {
+// XXX: namespace
+interface LogDataActivity {
+  castStart: number | null;
+  // XXX: Date
+  lastCredit: number;
+  uptime: number;
+}
+
+interface LogDataS {
+  encounterStart: number;
+  lastServerTime: number;
+  activity: {
+    [name: string]: LogDataActivity;
+  };
+}
+
+class LogData implements LogDataS {
+  // XXX: Why duplicate?
+  // XXX: !
+  encounterStart!: number;
+  // XXX: !
+  lastServerTime!: number;
+  // XXX: !
+  activity!: {
+    [name: string]: {
+      castStart: number | null;
+      lastCredit: number;
+      uptime: number;
+    };
+  };
+
+  static startNew({ encounterStart }: { encounterStart: number }) {
     return new this({
       encounterStart,
       lastServerTime: encounterStart,
@@ -445,7 +629,8 @@ class LogData {
     });
   }
 
-  constructor(attrs) {
+  // XXX: any
+  constructor(attrs: any) {
     Object.assign(this, attrs);
   }
 
@@ -453,22 +638,30 @@ class LogData {
     return this.lastServerTime - this.encounterStart;
   }
 
-  uptimeFor(name) {
+  uptimeFor(name: string) {
     return this.activity[name]?.uptime ?? 0;
   }
 
-  updateTime(serverTime) {
-    return new this.constructor(fset(this, { lastServerTime: serverTime }));
+  updateTime(serverTime: number) {
+    // XXX: coersion
+    return new (this.constructor as any)(
+      fset(this, { lastServerTime: serverTime })
+    );
   }
 
-  updateActivity(sourceName, f) {
+  updateActivity(
+    sourceName: string,
+    f: (_: LogDataActivity) => LogDataActivity
+  ) {
     const record = this.activity[sourceName] ?? {
       castStart: null,
-      lastCredit: new Date(0),
+      // XXX: coersion
+      lastCredit: (new Date(0) as unknown) as number,
       uptime: 0,
     };
 
-    return new this.constructor(
+    // XXX: coersion
+    return new (this.constructor as any)(
       fset(this, {
         activity: fset(this.activity, { [sourceName]: f(record) }),
       })
@@ -476,11 +669,24 @@ class LogData {
   }
 }
 
-class App extends React.Component {
+// XXX: namespace
+interface AppProps {}
+
+interface AppState {
+  playerName: string | null;
+  currentEncounter: DataUpdateEmbellished | null;
+  history: Array<DataUpdateEmbellished>;
+  selectedEncounter: DataUpdateEmbellished | null;
+  rollingLogData: LogData | null;
+  serverTime: number;
+  lastLogLine: number | null;
+}
+
+class App extends React.Component<AppProps, AppState> {
   static HISTORY_KEY = "meters";
   static PLAYER_NAME_KEY = "playerName";
 
-  constructor(props) {
+  constructor(props: AppProps) {
     super(props);
     this.state = {
       playerName: null,
@@ -488,18 +694,22 @@ class App extends React.Component {
       history: [],
       selectedEncounter: null,
       rollingLogData: null,
-      serverTime: new Date(0),
+      // XXX: coersion / wrong type
+      serverTime: (new Date(0) as unknown) as number,
       lastLogLine: null,
     };
   }
 
   componentDidMount() {
-    document.addEventListener("onLogLine", (e) => this.onLogLine(e));
+    // XXX: coersion
+    document.addEventListener("onLogLine", (e) => this.onLogLine(e as any));
     document.addEventListener("onOverlayDataUpdate", (e) =>
-      this.onOverlayDataUpdate(e)
+      // XXX: coersion
+      this.onOverlayDataUpdate(e as any)
     );
     document.addEventListener("onOverlayStateUpdate", (e) =>
-      this.onOverlayStateUpdate(e)
+      // XXX: coersion
+      this.onOverlayStateUpdate(e as any)
     );
 
     try {
@@ -508,7 +718,10 @@ class App extends React.Component {
         this.setState({ playerName });
       }
 
-      const history = JSON.parse(localStorage.getItem(App.HISTORY_KEY));
+      // XXX: coersion
+      const history = JSON.parse(
+        localStorage.getItem(App.HISTORY_KEY) as string
+      );
       if (history) {
         this.setState({ currentEncounter: history[0], history: history });
       }
@@ -517,7 +730,7 @@ class App extends React.Component {
     }
   }
 
-  onOverlayStateUpdate(e) {
+  onOverlayStateUpdate(e: CustomEvent<StateUpdate>) {
     if (!e.detail.isLocked) {
       document.documentElement.classList.add("resizable");
     } else {
@@ -525,7 +738,7 @@ class App extends React.Component {
     }
   }
 
-  onOverlayDataUpdate(e) {
+  onOverlayDataUpdate(e: CustomEvent<DataUpdate>) {
     const currentEncounter = e.detail;
     // Encounters without combatants can be nearby pulls in public areas that
     // you aren't involved in. Drop those updates unless they include someone.
@@ -533,12 +746,13 @@ class App extends React.Component {
 
     let { history } = this.state;
 
-    const isActive = (enc) => enc?.isActive === "true";
-    const duration = (enc) => enc?.Encounter?.DURATION;
+    const isActive = (enc: DataUpdate | null) => enc?.isActive === "true";
+    const duration = (enc: DataUpdate | null) => enc?.Encounter?.DURATION;
 
     // Encounter started
     if (!isActive(this.state.currentEncounter) && isActive(currentEncounter)) {
-      const updateLag = performance.now() - this.state.lastLogLine;
+      // XXX: coersion
+      const updateLag = performance.now() - (this.state.lastLogLine as number);
       this.setState({
         selectedEncounter: null,
         rollingLogData: LogData.startNew({
@@ -553,43 +767,64 @@ class App extends React.Component {
     // log data we applied is the most semantically correct one.
     const logData =
       duration(this.state.currentEncounter) === duration(currentEncounter) &&
-      this.state.currentEncounter.logData !== null
-        ? this.state.currentEncounter.logData
+      // XXX: coersion
+      (this.state.currentEncounter as DataUpdateEmbellished).logData !== null
+        ? // XXX: coersion
+          (this.state.currentEncounter as DataUpdateEmbellished).logData
         : this.state.rollingLogData;
+
     // This could be null if you reloaded the overlay mid-combat.
-    if (logData !== null) this.embellish(currentEncounter, logData);
+    if (logData !== null)
+      // XXX: coersion
+      this.embellish(currentEncounter as DataUpdateEmbellished, logData);
 
     // Encounter ended
-    if (isActive(this.state.currentEncounter) && !isActive(currentEncounter)) {
-      history = [currentEncounter].concat(history).slice(0, 10);
+    if (
+      isActive(this.state.currentEncounter) &&
+      // XXX: coersion
+      !isActive(currentEncounter as DataUpdateEmbellished)
+    ) {
+      // XXX: coersion
+      history = [currentEncounter as DataUpdateEmbellished]
+        .concat(history)
+        .slice(0, 10);
 
       localStorage.setItem(App.HISTORY_KEY, JSON.stringify(history));
     }
 
-    this.setState({ currentEncounter, history });
+    // XXX: coersion
+    this.setState({ currentEncounter, history } as any);
   }
 
-  setPlayerName(playerName) {
+  setPlayerName(playerName: string | null) {
     if (playerName && playerName !== this.state.playerName) {
       localStorage.setItem(App.PLAYER_NAME_KEY, playerName);
       this.setState({ playerName });
     }
   }
 
-  onLogLine(e) {
+  onLogLine(e: CustomEvent<LogLine>) {
     const [code, timestamp, ...message] = JSON.parse(e.detail);
     // Sometimes the log lines go backwards in time, though I think this is
     // impossible within the codes we use.
-    const serverTime = Math.max(this.state.serverTime, new Date(timestamp));
+    const serverTime = Math.max(
+      this.state.serverTime,
+      // XXX: coersion
+      (new Date(timestamp) as unknown) as number
+    );
     const lastLogLine = performance.now();
 
-    const applyUpdate = (sourceName, f) => {
+    const applyUpdate = (
+      sourceName?: string,
+      f?: (_: LogDataActivity) => LogDataActivity
+    ) => {
       this.setState({ serverTime, lastLogLine });
 
       if (this.state.rollingLogData !== null) {
         let rollingLogData = this.state.rollingLogData.updateTime(serverTime);
         if (sourceName !== undefined) {
-          rollingLogData = rollingLogData.updateActivity(sourceName, f);
+          // XXX: coersion
+          rollingLogData = rollingLogData.updateActivity(sourceName, f as any);
         }
         this.setState({ rollingLogData });
       }
@@ -616,9 +851,11 @@ class App extends React.Component {
         // your GCD is due to spell/skill speed.
         const wasCasting = castStart !== null;
         const uptimeCredit = wasCasting
-          ? Math.max(GCD, serverTime - castStart)
+          ? // XXX: coersion
+            Math.max(GCD, serverTime - (castStart as number))
           : GCD;
-        const creditTime = wasCasting ? castStart : serverTime;
+        // XXX: coersion
+        const creditTime = wasCasting ? (castStart as number) : serverTime;
 
         // However, in either case, if `GCD` has not elapsed between the two
         // credit times, the next credit is reduced so as not to double-credit.
@@ -639,10 +876,12 @@ class App extends React.Component {
     }
   }
 
-  onSelectEncounter(index) {
-    if (index >= 0) {
+  onSelectEncounter(index: number | null) {
+    // XXX: coersion
+    if ((index as number) >= 0) {
       this.setState({
-        selectedEncounter: this.state.history[index],
+        // XXX: coersion
+        selectedEncounter: this.state.history[index as number],
       });
     } else {
       this.setState({
@@ -651,14 +890,16 @@ class App extends React.Component {
     }
   }
 
-  embellish(data, logData) {
+  // XXX: wrong type
+  embellish(data: DataUpdateEmbellished, logData: LogData) {
     const { playerName } = this.state;
     data.logData = logData;
 
     if (playerName && YOU in data.Combatant) {
       data.Combatant[YOU].isSelf = true;
       data.Combatant[YOU].name = playerName;
-      data.Combatant[this.state.playerName] = data.Combatant[YOU];
+      // XXX: fix
+      data.Combatant[this.state.playerName as string] = data.Combatant[YOU];
       delete data.Combatant[YOU];
     }
 
