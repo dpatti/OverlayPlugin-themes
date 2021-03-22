@@ -1,5 +1,5 @@
-const _ = window._;
-const React = window.React;
+import _ from "lodash";
+import React from "react";
 
 const GCD = 2500;
 
@@ -690,4 +690,4 @@ class App extends React.Component {
   }
 }
 
-window.App = App;
+export default App;

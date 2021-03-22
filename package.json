@@ -9,14 +9,17 @@
     "@babel/plugin-proposal-class-properties": "^7.12.13",
     "@babel/plugin-transform-react-jsx": "^7.12.12",
     "@babel/preset-env": "^7.12.11",
+    "babel-loader": "^8.2.2",
     "eslint": "^7.19.0",
     "eslint-plugin-react": "^7.22.0",
     "lodash": "^4.17.21",
     "prettier": "^2.2.1",
     "react": "^17.0.1",
-    "react-dom": "^17.0.1"
+    "react-dom": "^17.0.1",
+    "webpack": "^5.27.1",
+    "webpack-cli": "^4.5.0"
   },
   "scripts": {
-    "build": "babel --watch --out-dir lib/ app/meters.jsx app/timers.jsx node_modules/react/umd/react.production.min.js node_modules/react-dom/umd/react-dom.production.min.js node_modules/lodash/lodash.min.js"
+    "build": "webpack --watch"
   }
 }

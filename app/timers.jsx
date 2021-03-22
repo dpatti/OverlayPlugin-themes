@@ -1,5 +1,5 @@
-const _ = window._;
-const React = window.React;
+import _ from "lodash";
+import React from "react";
 
 const Scope = { Friendly: 0, Enemy: 1 };
 const Target = { Self: 0, Single: 1, Many: 2 };
@@ -401,4 +401,4 @@ class App extends React.Component {
   }
 }
 
-window.App = App;
+export default App;
