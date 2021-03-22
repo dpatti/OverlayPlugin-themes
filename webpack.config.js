@@ -10,4 +10,13 @@ module.exports = {
   module: {
     rules: [{ test: /\.jsx$/, use: "babel-loader" }],
   },
+  devServer: {
+    contentBase: "./releases/dev",
+    host: "0.0.0.0",
+    port: 8000,
+    compress: true,
+    // Prevent webpack dev server injection
+    inline: false,
+    writeToDisk: true,
+  },
 };

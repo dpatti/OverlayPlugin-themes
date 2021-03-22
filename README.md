@@ -47,13 +47,7 @@ URL: <https://dpatti.github.io/ffxiv-overlay/releases/v1/>
 ## In development
 
 ```
-yarn build
-```
-
-and
-
-```
-cd releases/dev && python -m http.server
+yarn serve
 ```
 
 ### Extensions
