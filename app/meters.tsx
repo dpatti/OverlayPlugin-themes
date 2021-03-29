@@ -33,7 +33,6 @@ type LogLine = string;
 
 interface Encounter {
   title: string;
-  duration: string;
   DURATION: string;
   damage: string;
   encdps: string;
@@ -131,10 +130,10 @@ const formatName = (name: string) => {
   }
 };
 
-const formatEncounter = (enc: EncounterEmbellished) =>
-  enc.durationTotal
-    ? `${enc.title} (${formatSpan(enc.durationTotal)})`
-    : `${enc.title} (${enc.duration})`;
+const formatEncounter = (enc: EncounterEmbellished) => {
+  let time = enc.durationTotal ? enc.durationTotal : parseFloat(enc.DURATION);
+  return `${enc.title} (${formatSpan(time)})`;
+};
 
 const formatNumber = (n: number) => {
   if (n >= 1000000) {
