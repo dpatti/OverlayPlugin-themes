@@ -8,7 +8,7 @@ module.exports = {
     path: path.resolve(__dirname, "releases/dev"),
   },
   module: {
-    rules: [{ test: /\.jsx$/, use: "babel-loader" }],
+    rules: [{ test: /\.[jt]sx$/, use: "babel-loader" }],
   },
   devServer: {
     contentBase: "./releases/dev",

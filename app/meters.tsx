@@ -6,16 +6,88 @@ const GCD = 2500;
 const LIMIT_BREAK = "Limit Break";
 const YOU = "YOU";
 
-const View = {
-  Damage: "Damage",
-  Healing: "Healing",
-  Tanking: "Tanking",
-  Uptime: "Uptime",
-  Deaths: "Deaths",
-};
+type Span = number;
+
+type NonMethodKeys<T> = ({
+  [P in keyof T]: T[P] extends Function ? never : P;
+} & { [x: string]: never })[keyof T];
+type Struct<T> = Pick<T, NonMethodKeys<T>>;
+
+interface StateUpdate {
+  isLocked: boolean;
+}
+
+interface DataUpdate {
+  Encounter: Encounter;
+  Combatant: { [name: string]: Combatant };
+  isActive: "true" | "false";
+}
+
+interface DataUpdateEmbellished extends DataUpdate {
+  Encounter: EncounterEmbellished;
+  Combatant: { [name: string]: CombatantEmbellished };
+  logData: LogData | null;
+}
+
+type LogLine = string;
+
+interface Encounter {
+  title: string;
+  duration: string;
+  DURATION: string;
+  damage: string;
+  encdps: string;
+  healed: string;
+  enchps: string;
+  deaths: string;
+  maxhit: string;
+  maxheal: string;
+}
+
+interface EncounterEmbellished extends Encounter {
+  durationTotal: number;
+}
+
+interface Combatant {
+  name: string;
+  Job: string;
+  ["crithit%"]: string;
+  DirectHitPct: string;
+  CritDirectHitPct: string;
+  ["critheal%"]: string;
+  damage: string;
+  encdps: string;
+  ["damage%"]: string;
+  healed: string;
+  enchps: string;
+  ["healed%"]: string;
+  OverHealPct: string;
+  damagetaken: string;
+  ParryPct: string;
+  BlockPct: string;
+  deaths: string;
+  maxhit: string;
+  maxheal: string;
+}
+
+interface CombatantEmbellished extends Combatant {
+  uptime: number;
+  ["uptime%"]: number;
+  isSelf: boolean;
+}
+
+enum View {
+  Damage = "Damage",
+  Healing = "Healing",
+  Tanking = "Tanking",
+  Uptime = "Uptime",
+  Deaths = "Deaths",
+}
 
 const options = ((search) => {
-  let options = {};
+  type dict = { [key: string]: string };
+
+  let options: dict = {};
 
   if (search[0] === "?") {
     search
@@ -34,9 +106,24 @@ const options = ((search) => {
 })(document.location.search);
 
 // helper to functionally set a key in an object by returning a new copy
-const fset = (obj, extensions) => _.defaults(extensions, obj);
+const fset = <A, B>(obj: A, extensions: B): A & B =>
+  _.defaults(extensions, obj);
 
-const formatName = (name) => {
+const dateAdd = (a: Date, b: Span): Date => new Date(a.getTime() + b);
+const dateDiff = (a: Date, b: Date): Span => a.getTime() - b.getTime();
+const dateMax = (a: Date, b: Date): Date => (a > b ? new Date(a) : new Date(b));
+
+// When duration is 0, ACT sends the dps as the string "∞"
+const parseRate = (s: string): number => {
+  let n = parseFloat(s);
+  if (Number.isNaN(n)) {
+    return 0;
+  } else {
+    return n;
+  }
+};
+
+const formatName = (name: string) => {
   if (name == YOU) {
     return options.you;
   } else {
@@ -44,38 +131,49 @@ const formatName = (name) => {
   }
 };
 
-const formatEncounter = (enc) =>
+const formatEncounter = (enc: EncounterEmbellished) =>
   enc.durationTotal
     ? `${enc.title} (${formatSpan(enc.durationTotal)})`
     : `${enc.title} (${enc.duration})`;
 
-const formatNumber = (number) => {
-  number = parseFloat(number);
-
-  if (number >= 1000000) {
-    return (number / 1000000).toFixed(2) + "M";
-  } else if (number >= 1000) {
-    return (number / 1000).toFixed(2) + "K";
+const formatNumber = (n: number) => {
+  if (n >= 1000000) {
+    return (n / 1000000).toFixed(2) + "M";
+  } else if (n >= 1000) {
+    return (n / 1000).toFixed(2) + "K";
   }
 
-  return number.toFixed(2);
+  return n.toFixed(2);
 };
 
-const formatPercent = (number) => `${(number * 100).toFixed(0)}%`;
+const formatPercent = (n: number) => `${(n * 100).toFixed(0)}%`;
 
-const formatSpan = (ms) => {
+const formatSpan = (ms: number) => {
   const seconds = ms / 1000;
   const min = Math.floor(seconds / 60);
   const sec = (Math.abs(seconds) % 60).toFixed(0);
   return `${min}:${("0" + sec).slice(-2)}`;
 };
 
-class CombatantCompact extends React.Component {
-  render() {
-    const width =
-      Math.min(100, parseInt((this.props.total / this.props.max) * 100)) + "%";
+interface CombatantCompactProps {
+  total: number;
+  max: number;
+  actor: string;
+  isSelf: boolean;
+  format: (_: number) => string;
+  note?: string;
+  extra: Array<string>;
+  rank: number;
+  characterName: string;
+  job: string;
+}
 
-    return this.props.perSecond === "---" ? null : (
+class CombatantCompact extends React.PureComponent<CombatantCompactProps> {
+  render() {
+    const percent = this.props.total / this.props.max;
+    const width = Math.min(100, percent * 100) + "%";
+
+    return (
       <li
         className={`row ${this.props.actor} ${this.props.isSelf ? "self" : ""}`}
       >
@@ -104,8 +202,17 @@ class CombatantCompact extends React.Component {
   }
 }
 
-class Stats extends React.Component {
-  constructor(props) {
+interface StatsProps {
+  encounter: EncounterEmbellished;
+  self: CombatantEmbellished;
+}
+
+interface StatsState {
+  group: boolean;
+}
+
+class Stats extends React.Component<StatsProps, StatsState> {
+  constructor(props: StatsProps) {
     super(props);
     this.state = {
       group: true,
@@ -122,7 +229,11 @@ class Stats extends React.Component {
     const self = this.props.self;
     const dataSource = this.state.group || !self ? this.props.encounter : self;
 
-    const Stat = (props) =>
+    const Stat: React.FunctionComponent<{
+      label: string;
+      value?: string;
+      self?: boolean;
+    }> = (props) =>
       props.value && (!props.self || !this.state.group) ? (
         <div className="cell">
           <span className="label ff-header">{props.label}</span>
@@ -150,9 +261,9 @@ class Stats extends React.Component {
         <div className="extra-row damage">
           <Stat
             label="Damage"
-            value={`${formatNumber(dataSource.damage)} (${formatNumber(
-              dataSource.encdps
-            )})`}
+            value={`${formatNumber(
+              parseInt(dataSource.damage)
+            )} (${formatNumber(parseRate(dataSource.encdps))})`}
           />
           <Stat label="Max" value={dataSource.maxhit} />
           <Stat self label="Crit%" value={self?.["crithit%"]} />
@@ -163,9 +274,9 @@ class Stats extends React.Component {
         <div className="extra-row healing">
           <Stat
             label="Heals"
-            value={`${formatNumber(dataSource.healed)} (${formatNumber(
-              dataSource.enchps
-            )})`}
+            value={`${formatNumber(
+              parseInt(dataSource.healed)
+            )} (${formatNumber(parseRate(dataSource.enchps))})`}
           />
           <Stat label="Max" value={dataSource.maxheal} />
           <Stat self label="Crit%" value={self?.["critheal%"]} />
@@ -175,8 +286,22 @@ class Stats extends React.Component {
   }
 }
 
-class Header extends React.Component {
-  constructor(props) {
+interface HeaderProps {
+  encounter: EncounterEmbellished;
+  onSelectEncounter: (index: number | null) => void;
+  currentView: View;
+  history: Array<DataUpdateEmbellished>;
+  onViewChange: () => void;
+  self: CombatantEmbellished;
+}
+
+interface HeaderState {
+  expanded: boolean;
+  showEncountersList: boolean;
+}
+
+class Header extends React.Component<HeaderProps, HeaderState> {
+  constructor(props: HeaderProps) {
     super(props);
     this.state = {
       expanded: false,
@@ -184,7 +309,8 @@ class Header extends React.Component {
     };
   }
 
-  shouldComponentUpdate(nextProps) {
+  // XXX: Delete?
+  shouldComponentUpdate(nextProps: HeaderProps) {
     // Will need to add a null check here if we are swapping betwen self and
     // group. Possibly more null checks as well.
     if (nextProps.encounter.encdps === "---") {
@@ -206,7 +332,7 @@ class Header extends React.Component {
     });
   }
 
-  onSelectEncounter(index) {
+  onSelectEncounter(index: number | null) {
     this.toggleEncounterMenu(false);
     this.props.onSelectEncounter(index);
   }
@@ -215,11 +341,15 @@ class Header extends React.Component {
     const encounter = this.props.encounter;
 
     const currentViewSummary = {
-      [View.Damage]: `Damage (${formatNumber(encounter.encdps)} dps)`,
-      [View.Healing]: `Healing (${formatNumber(encounter.enchps)} hps)`,
+      [View.Damage]: `Damage (${formatNumber(
+        parseRate(encounter.encdps)
+      )} dps)`,
+      [View.Healing]: `Healing (${formatNumber(
+        parseRate(encounter.enchps)
+      )} hps)`,
       [View.Tanking]: `Damage Taken`,
       [View.Uptime]: `Uptime`,
-      [View.Deaths]: `Deaths (${encounter.deaths} total)`,
+      [View.Deaths]: `Deaths (${parseInt(encounter.deaths)} total)`,
     }[this.props.currentView];
 
     return (
@@ -275,8 +405,13 @@ class Header extends React.Component {
   }
 }
 
-class Combatants extends React.Component {
-  shouldComponentUpdate(nextProps) {
+interface CombatantsProps {
+  combatants: Array<CombatantEmbellished>;
+  currentView: View;
+}
+
+class Combatants extends React.Component<CombatantsProps> {
+  shouldComponentUpdate(nextProps: CombatantsProps) {
     // if data is empty then don't re-render
     if (Object.getOwnPropertyNames(nextProps.combatants).length === 0) {
       return false;
@@ -287,7 +422,7 @@ class Combatants extends React.Component {
 
   render() {
     const maxRows = 12;
-    let max;
+    let max: number;
 
     const rows = _.take(this.props.combatants, maxRows).map(
       (combatant, rank) => {
@@ -304,18 +439,24 @@ class Combatants extends React.Component {
           {
             [View.Damage]: {
               format: formatNumber,
-              total: combatant.damage,
-              extra: [formatNumber(combatant.encdps), combatant["damage%"]],
+              total: parseInt(combatant.damage),
+              extra: [
+                formatNumber(parseRate(combatant.encdps)),
+                combatant["damage%"],
+              ],
             },
             [View.Healing]: {
               format: formatNumber,
-              total: combatant.healed,
+              total: parseInt(combatant.healed),
               note: `${combatant.OverHealPct} OH`,
-              extra: [formatNumber(combatant.enchps), combatant["healed%"]],
+              extra: [
+                formatNumber(parseRate(combatant.enchps)),
+                combatant["healed%"],
+              ],
             },
             [View.Tanking]: {
               format: formatNumber,
-              total: combatant.damagetaken,
+              total: parseInt(combatant.damagetaken),
               extra: [
                 `${combatant.ParryPct} parry`,
                 `${combatant.BlockPct} block`,
@@ -328,7 +469,7 @@ class Combatants extends React.Component {
             },
             [View.Deaths]: {
               format: _.identity,
-              total: combatant.deaths,
+              total: parseInt(combatant.deaths),
               extra: [],
             },
           }[this.props.currentView]
@@ -351,15 +492,29 @@ class Combatants extends React.Component {
   }
 }
 
-class DamageMeter extends React.Component {
-  constructor(props) {
+interface DamageMeterProps {
+  data: DataUpdateEmbellished;
+  playerName: string | null;
+  history: Array<DataUpdateEmbellished>;
+  onSelectEncounter: (index: number | null) => void;
+}
+
+interface DamageMeterState {
+  currentView: View;
+}
+
+class DamageMeter extends React.Component<DamageMeterProps, DamageMeterState> {
+  constructor(props: DamageMeterProps) {
     super(props);
     this.state = {
       currentView: View.Damage,
     };
   }
 
-  shouldComponentUpdate(nextProps, nextState) {
+  shouldComponentUpdate(
+    nextProps: DamageMeterProps,
+    nextState: DamageMeterState
+  ) {
     if (nextProps.data.Encounter.encdps === "---") {
       return false;
     }
@@ -372,7 +527,7 @@ class DamageMeter extends React.Component {
   }
 
   handleViewChange() {
-    const views = Object.keys(View);
+    const views = Object.values(View);
     const index = views.indexOf(this.state.currentView);
 
     this.setState({
@@ -384,18 +539,18 @@ class DamageMeter extends React.Component {
     const encounter = this.props.data;
 
     const stat = {
-      [View.Damage]: "damage",
-      [View.Healing]: "healed",
-      [View.Tanking]: "damagetaken",
-      [View.Uptime]: "uptime",
-      [View.Deaths]: "deaths",
+      [View.Damage]: (c: CombatantEmbellished) => parseInt(c.damage),
+      [View.Healing]: (c: CombatantEmbellished) => parseInt(c.healed),
+      [View.Tanking]: (c: CombatantEmbellished) => parseInt(c.damagetaken),
+      [View.Uptime]: (c: CombatantEmbellished) => c.uptime,
+      [View.Deaths]: (c: CombatantEmbellished) => parseInt(c.deaths),
     }[this.state.currentView];
 
     const self = encounter.Combatant[this.props.playerName ?? YOU];
 
     const combatants = _.sortBy(
-      _.filter(encounter.Combatant, (d) => parseInt(d[stat]) > 0),
-      (d) => -parseInt(d[stat])
+      _.filter(encounter.Combatant, (d) => stat(d) > 0),
+      (d) => -stat(d)
     );
 
     return (
@@ -422,8 +577,12 @@ class DamageMeter extends React.Component {
   }
 }
 
-class Debugger extends React.Component {
-  constructor(props) {
+interface DebuggerProps {
+  data: DataUpdateEmbellished;
+}
+
+class Debugger extends React.PureComponent<DebuggerProps> {
+  constructor(props: DebuggerProps) {
     super(props);
   }
 
@@ -436,8 +595,20 @@ class Debugger extends React.Component {
   }
 }
 
+interface LogDataActivity {
+  castStart: Date | null;
+  lastCredit: Date;
+  uptime: Span;
+}
+
 class LogData {
-  static startNew({ encounterStart }) {
+  encounterStart: Date;
+  lastServerTime: Date;
+  activity: {
+    [name: string]: LogDataActivity;
+  };
+
+  static startNew({ encounterStart }: { encounterStart: Date }) {
     return new this({
       encounterStart,
       lastServerTime: encounterStart,
@@ -445,30 +616,35 @@ class LogData {
     });
   }
 
-  constructor(attrs) {
-    Object.assign(this, attrs);
+  constructor({ encounterStart, lastServerTime, activity }: Struct<LogData>) {
+    this.encounterStart = encounterStart;
+    this.lastServerTime = lastServerTime;
+    this.activity = activity;
   }
 
   encounterDuration() {
-    return this.lastServerTime - this.encounterStart;
+    return dateDiff(this.lastServerTime, this.encounterStart);
   }
 
-  uptimeFor(name) {
+  uptimeFor(name: string) {
     return this.activity[name]?.uptime ?? 0;
   }
 
-  updateTime(serverTime) {
-    return new this.constructor(fset(this, { lastServerTime: serverTime }));
+  updateTime(serverTime: Date) {
+    return new LogData(fset(this, { lastServerTime: serverTime }));
   }
 
-  updateActivity(sourceName, f) {
+  updateActivity(
+    sourceName: string,
+    f: (_: LogDataActivity) => LogDataActivity
+  ) {
     const record = this.activity[sourceName] ?? {
       castStart: null,
       lastCredit: new Date(0),
       uptime: 0,
     };
 
-    return new this.constructor(
+    return new LogData(
       fset(this, {
         activity: fset(this.activity, { [sourceName]: f(record) }),
       })
@@ -476,11 +652,23 @@ class LogData {
   }
 }
 
-class App extends React.Component {
+interface AppProps {}
+
+interface AppState {
+  playerName: string | null;
+  currentEncounter: DataUpdateEmbellished | null;
+  history: Array<DataUpdateEmbellished>;
+  selectedEncounter: DataUpdateEmbellished | null;
+  rollingLogData: LogData | null;
+  serverTime: Date;
+  lastLogLine: number | null;
+}
+
+class App extends React.Component<AppProps, AppState> {
   static HISTORY_KEY = "meters";
   static PLAYER_NAME_KEY = "playerName";
 
-  constructor(props) {
+  constructor(props: AppProps) {
     super(props);
     this.state = {
       playerName: null,
@@ -494,30 +682,40 @@ class App extends React.Component {
   }
 
   componentDidMount() {
-    document.addEventListener("onLogLine", (e) => this.onLogLine(e));
-    document.addEventListener("onOverlayDataUpdate", (e) =>
-      this.onOverlayDataUpdate(e)
-    );
-    document.addEventListener("onOverlayStateUpdate", (e) =>
-      this.onOverlayStateUpdate(e)
-    );
+    // Because TypeScript DOM types don't support CustomEvents by default
+    const addEventListener = <T,>(
+      name: string,
+      f: (_: CustomEvent<T>) => void
+    ) => {
+      document.addEventListener(name, f.bind(this) as EventListener);
+    };
+
+    addEventListener("onLogLine", this.onLogLine);
+    addEventListener("onOverlayDataUpdate", this.onOverlayDataUpdate);
+    addEventListener("onOverlayStateUpdate", this.onOverlayStateUpdate);
+
+    const withLoad = (key: string, f: (_: string) => void) => {
+      const value = localStorage.getItem(key);
+      if (value) f(value);
+    };
 
     try {
-      const playerName = localStorage.getItem(App.PLAYER_NAME_KEY);
-      if (playerName) {
+      withLoad(App.PLAYER_NAME_KEY, (playerName) => {
         this.setState({ playerName });
-      }
+      });
 
-      const history = JSON.parse(localStorage.getItem(App.HISTORY_KEY));
-      if (history) {
-        this.setState({ currentEncounter: history[0], history: history });
-      }
+      withLoad(App.HISTORY_KEY, (payload) => {
+        const history = JSON.parse(payload);
+        if (history) {
+          this.setState({ currentEncounter: history[0], history: history });
+        }
+      });
     } catch (ex) {
       console.error(`Couldn't load state: ${ex}`);
     }
   }
 
-  onOverlayStateUpdate(e) {
+  onOverlayStateUpdate(e: CustomEvent<StateUpdate>) {
     if (!e.detail.isLocked) {
       document.documentElement.classList.add("resizable");
     } else {
@@ -525,7 +723,7 @@ class App extends React.Component {
     }
   }
 
-  onOverlayDataUpdate(e) {
+  onOverlayDataUpdate(e: CustomEvent<DataUpdate>) {
     const currentEncounter = e.detail;
     // Encounters without combatants can be nearby pulls in public areas that
     // you aren't involved in. Drop those updates unless they include someone.
@@ -533,18 +731,21 @@ class App extends React.Component {
 
     let { history } = this.state;
 
-    const isActive = (enc) => enc?.isActive === "true";
-    const duration = (enc) => enc?.Encounter?.DURATION;
+    const isActive = (enc: DataUpdate | null) => enc?.isActive === "true";
+    const duration = (enc: DataUpdate | null) => enc?.Encounter.DURATION;
 
     // Encounter started
     if (!isActive(this.state.currentEncounter) && isActive(currentEncounter)) {
-      const updateLag = performance.now() - this.state.lastLogLine;
-      this.setState({
-        selectedEncounter: null,
-        rollingLogData: LogData.startNew({
-          encounterStart: this.state.serverTime + updateLag,
-        }),
-      });
+      // XXX: lastLogLine / serverTime as null
+      if (this.state.lastLogLine !== null && this.state.serverTime !== null) {
+        const updateLag = performance.now() - this.state.lastLogLine;
+        this.setState({
+          selectedEncounter: null,
+          rollingLogData: LogData.startNew({
+            encounterStart: dateAdd(this.state.serverTime, updateLag),
+          }),
+        });
+      }
     }
 
     // Only use our latest log data if the encounter's timer advanced. It's
@@ -553,42 +754,52 @@ class App extends React.Component {
     // log data we applied is the most semantically correct one.
     const logData =
       duration(this.state.currentEncounter) === duration(currentEncounter) &&
-      this.state.currentEncounter.logData !== null
-        ? this.state.currentEncounter.logData
+      this.state.currentEncounter?.logData !== null
+        ? // XXX: Extra null check implied by above
+          (this.state.currentEncounter as DataUpdateEmbellished).logData
         : this.state.rollingLogData;
+
     // This could be null if you reloaded the overlay mid-combat.
     if (logData !== null) this.embellish(currentEncounter, logData);
+    // XXX: mutation doesn't work well with types
+    const embellishedEncounter = currentEncounter as DataUpdateEmbellished;
 
     // Encounter ended
-    if (isActive(this.state.currentEncounter) && !isActive(currentEncounter)) {
-      history = [currentEncounter].concat(history).slice(0, 10);
+    if (
+      isActive(this.state.currentEncounter) &&
+      !isActive(embellishedEncounter)
+    ) {
+      history = [embellishedEncounter].concat(history).slice(0, 10);
 
       localStorage.setItem(App.HISTORY_KEY, JSON.stringify(history));
     }
 
-    this.setState({ currentEncounter, history });
+    this.setState({ currentEncounter: embellishedEncounter, history });
   }
 
-  setPlayerName(playerName) {
+  setPlayerName(playerName: string | null) {
     if (playerName && playerName !== this.state.playerName) {
       localStorage.setItem(App.PLAYER_NAME_KEY, playerName);
       this.setState({ playerName });
     }
   }
 
-  onLogLine(e) {
+  onLogLine(e: CustomEvent<LogLine>) {
     const [code, timestamp, ...message] = JSON.parse(e.detail);
     // Sometimes the log lines go backwards in time, though I think this is
     // impossible within the codes we use.
-    const serverTime = Math.max(this.state.serverTime, new Date(timestamp));
+    const serverTime = dateMax(this.state.serverTime, new Date(timestamp));
     const lastLogLine = performance.now();
 
-    const applyUpdate = (sourceName, f) => {
+    const applyUpdate = (
+      sourceName?: string,
+      f?: (_: LogDataActivity) => LogDataActivity
+    ) => {
       this.setState({ serverTime, lastLogLine });
 
       if (this.state.rollingLogData !== null) {
         let rollingLogData = this.state.rollingLogData.updateTime(serverTime);
-        if (sourceName !== undefined) {
+        if (sourceName !== undefined && f !== undefined) {
           rollingLogData = rollingLogData.updateActivity(sourceName, f);
         }
         this.setState({ rollingLogData });
@@ -614,11 +825,10 @@ class App extends React.Component {
         // `GCD`, whichever is greater. If you weren't casting, you get `GCD`
         // worth of uptime credited to you. In both cases, we can't tell how much
         // your GCD is due to spell/skill speed.
-        const wasCasting = castStart !== null;
-        const uptimeCredit = wasCasting
-          ? Math.max(GCD, serverTime - castStart)
-          : GCD;
-        const creditTime = wasCasting ? castStart : serverTime;
+        const [uptimeCredit, creditTime] =
+          castStart !== null
+            ? [Math.max(GCD, dateDiff(serverTime, castStart)), castStart]
+            : [GCD, serverTime];
 
         // However, in either case, if `GCD` has not elapsed between the two
         // credit times, the next credit is reduced so as not to double-credit.
@@ -626,7 +836,10 @@ class App extends React.Component {
         // 3.5s total uptime credit. Another example: if I cast two 2s spells back
         // to back, I will get 4.5s of credit. This is a best approximation with
         // the information we have available.
-        const uptimeOvercredit = Math.max(0, GCD - (creditTime - lastCredit));
+        const uptimeOvercredit = Math.max(
+          0,
+          GCD - dateDiff(creditTime, lastCredit)
+        );
 
         return {
           castStart: null,
@@ -639,8 +852,8 @@ class App extends React.Component {
     }
   }
 
-  onSelectEncounter(index) {
-    if (index >= 0) {
+  onSelectEncounter(index: number | null) {
+    if (index && index >= 0) {
       this.setState({
         selectedEncounter: this.state.history[index],
       });
@@ -651,14 +864,16 @@ class App extends React.Component {
     }
   }
 
-  embellish(data, logData) {
+  embellish(dataUnembellished: DataUpdate, logData: LogData) {
     const { playerName } = this.state;
+    // XXX: mutation doesn't work well with types
+    let data = dataUnembellished as DataUpdateEmbellished;
     data.logData = logData;
 
     if (playerName && YOU in data.Combatant) {
       data.Combatant[YOU].isSelf = true;
       data.Combatant[YOU].name = playerName;
-      data.Combatant[this.state.playerName] = data.Combatant[YOU];
+      data.Combatant[playerName] = data.Combatant[YOU];
       delete data.Combatant[YOU];
     }
 

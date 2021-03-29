@@ -8,6 +8,7 @@
   "plugins": ["@babel", "react"],
   "rules": {
     "react/prop-types": "off",
+    "no-undef": "off",
     "no-unused-vars": [
       "error",
       { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }
