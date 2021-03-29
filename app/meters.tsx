@@ -6,6 +6,13 @@ const GCD = 2500;
 const LIMIT_BREAK = "Limit Break";
 const YOU = "YOU";
 
+type Span = number;
+
+type NonMethodKeys<T> = ({
+  [P in keyof T]: T[P] extends Function ? never : P;
+} & { [x: string]: never })[keyof T];
+type Struct<T> = Pick<T, NonMethodKeys<T>>;
+
 interface StateUpdate {
   isLocked: boolean;
 }
@@ -28,9 +35,13 @@ interface Encounter {
   title: string;
   duration: string;
   DURATION: string;
+  damage: string;
   encdps: string;
+  healed: string;
   enchps: string;
   deaths: string;
+  maxhit: string;
+  maxheal: string;
 }
 
 interface EncounterEmbellished extends Encounter {
@@ -47,14 +58,16 @@ interface Combatant {
   damage: string;
   encdps: string;
   ["damage%"]: string;
+  healed: string;
   enchps: string;
   ["healed%"]: string;
   OverHealPct: string;
-  healed: string;
   damagetaken: string;
   ParryPct: string;
   BlockPct: string;
   deaths: string;
+  maxhit: string;
+  maxheal: string;
 }
 
 interface CombatantEmbellished extends Combatant {
@@ -63,15 +76,13 @@ interface CombatantEmbellished extends Combatant {
   isSelf: boolean;
 }
 
-// XXX: enum
-type View = "Damage" | "Healing" | "Tanking" | "Uptime" | "Deaths";
-const View: { [key: string]: View } = {
-  Damage: "Damage",
-  Healing: "Healing",
-  Tanking: "Tanking",
-  Uptime: "Uptime",
-  Deaths: "Deaths",
-};
+enum View {
+  Damage = "Damage",
+  Healing = "Healing",
+  Tanking = "Tanking",
+  Uptime = "Uptime",
+  Deaths = "Deaths",
+}
 
 const options = ((search) => {
   type dict = { [key: string]: string };
@@ -98,6 +109,20 @@ const options = ((search) => {
 const fset = <A, B>(obj: A, extensions: B): A & B =>
   _.defaults(extensions, obj);
 
+const dateAdd = (a: Date, b: Span): Date => new Date(a.getTime() + b);
+const dateDiff = (a: Date, b: Date): Span => a.getTime() - b.getTime();
+const dateMax = (a: Date, b: Date): Date => (a > b ? new Date(a) : new Date(b));
+
+// When duration is 0, ACT sends the dps as the string "∞"
+const parseRate = (s: string): number => {
+  let n = parseFloat(s);
+  if (Number.isNaN(n)) {
+    return 0;
+  } else {
+    return n;
+  }
+};
+
 const formatName = (name: string) => {
   if (name == YOU) {
     return options.you;
@@ -111,20 +136,17 @@ const formatEncounter = (enc: EncounterEmbellished) =>
     ? `${enc.title} (${formatSpan(enc.durationTotal)})`
     : `${enc.title} (${enc.duration})`;
 
-const formatNumber = (number: number | string) => {
-  // XXX: coersion
-  number = parseFloat(number as string);
-
-  if (number >= 1000000) {
-    return (number / 1000000).toFixed(2) + "M";
-  } else if (number >= 1000) {
-    return (number / 1000).toFixed(2) + "K";
+const formatNumber = (n: number) => {
+  if (n >= 1000000) {
+    return (n / 1000000).toFixed(2) + "M";
+  } else if (n >= 1000) {
+    return (n / 1000).toFixed(2) + "K";
   }
 
-  return number.toFixed(2);
+  return n.toFixed(2);
 };
 
-const formatPercent = (number: number) => `${(number * 100).toFixed(0)}%`;
+const formatPercent = (n: number) => `${(n * 100).toFixed(0)}%`;
 
 const formatSpan = (ms: number) => {
   const seconds = ms / 1000;
@@ -133,7 +155,6 @@ const formatSpan = (ms: number) => {
   return `${min}:${("0" + sec).slice(-2)}`;
 };
 
-// XXX: namespace
 interface CombatantCompactProps {
   total: number;
   max: number;
@@ -147,19 +168,12 @@ interface CombatantCompactProps {
   job: string;
 }
 
-class CombatantCompact extends React.Component<CombatantCompactProps, {}> {
+class CombatantCompact extends React.PureComponent<CombatantCompactProps> {
   render() {
-    // XXX: coersion
-    const width =
-      ((Math.min(
-        100,
-        parseInt(
-          (((this.props.total / this.props.max) * 100) as unknown) as string
-        )
-      ) as unknown) as string) + "%";
+    const percent = this.props.total / this.props.max;
+    const width = Math.min(100, percent * 100) + "%";
 
-    // XXX: coersion
-    return (this.props as any).perSecond === "---" ? null : (
+    return (
       <li
         className={`row ${this.props.actor} ${this.props.isSelf ? "self" : ""}`}
       >
@@ -188,9 +202,8 @@ class CombatantCompact extends React.Component<CombatantCompactProps, {}> {
   }
 }
 
-// XXX: namespace
 interface StatsProps {
-  encounter: any;
+  encounter: EncounterEmbellished;
   self: CombatantEmbellished;
 }
 
@@ -248,9 +261,9 @@ class Stats extends React.Component<StatsProps, StatsState> {
         <div className="extra-row damage">
           <Stat
             label="Damage"
-            value={`${formatNumber(dataSource.damage)} (${formatNumber(
-              dataSource.encdps
-            )})`}
+            value={`${formatNumber(
+              parseInt(dataSource.damage)
+            )} (${formatNumber(parseRate(dataSource.encdps))})`}
           />
           <Stat label="Max" value={dataSource.maxhit} />
           <Stat self label="Crit%" value={self?.["crithit%"]} />
@@ -261,9 +274,9 @@ class Stats extends React.Component<StatsProps, StatsState> {
         <div className="extra-row healing">
           <Stat
             label="Heals"
-            value={`${formatNumber(dataSource.healed)} (${formatNumber(
-              dataSource.enchps
-            )})`}
+            value={`${formatNumber(
+              parseInt(dataSource.healed)
+            )} (${formatNumber(parseRate(dataSource.enchps))})`}
           />
           <Stat label="Max" value={dataSource.maxheal} />
           <Stat self label="Crit%" value={self?.["critheal%"]} />
@@ -273,7 +286,6 @@ class Stats extends React.Component<StatsProps, StatsState> {
   }
 }
 
-// XXX: namespace
 interface HeaderProps {
   encounter: EncounterEmbellished;
   onSelectEncounter: (index: number | null) => void;
@@ -297,6 +309,7 @@ class Header extends React.Component<HeaderProps, HeaderState> {
     };
   }
 
+  // XXX: Delete?
   shouldComponentUpdate(nextProps: HeaderProps) {
     // Will need to add a null check here if we are swapping betwen self and
     // group. Possibly more null checks as well.
@@ -328,11 +341,15 @@ class Header extends React.Component<HeaderProps, HeaderState> {
     const encounter = this.props.encounter;
 
     const currentViewSummary = {
-      [View.Damage]: `Damage (${formatNumber(encounter.encdps)} dps)`,
-      [View.Healing]: `Healing (${formatNumber(encounter.enchps)} hps)`,
+      [View.Damage]: `Damage (${formatNumber(
+        parseRate(encounter.encdps)
+      )} dps)`,
+      [View.Healing]: `Healing (${formatNumber(
+        parseRate(encounter.enchps)
+      )} hps)`,
       [View.Tanking]: `Damage Taken`,
       [View.Uptime]: `Uptime`,
-      [View.Deaths]: `Deaths (${encounter.deaths} total)`,
+      [View.Deaths]: `Deaths (${parseInt(encounter.deaths)} total)`,
     }[this.props.currentView];
 
     return (
@@ -388,7 +405,6 @@ class Header extends React.Component<HeaderProps, HeaderState> {
   }
 }
 
-// XXX: namespace
 interface CombatantsProps {
   combatants: Array<CombatantEmbellished>;
   currentView: View;
@@ -423,30 +439,24 @@ class Combatants extends React.Component<CombatantsProps> {
           {
             [View.Damage]: {
               format: formatNumber,
-              // XXX: coersion
-              total: (combatant.damage as unknown) as number,
+              total: parseInt(combatant.damage),
               extra: [
-                // XXX: coersion
-                formatNumber((combatant.encdps as unknown) as number),
+                formatNumber(parseRate(combatant.encdps)),
                 combatant["damage%"],
               ],
             },
             [View.Healing]: {
               format: formatNumber,
-              // XXX: coersion
-              total: (combatant.healed as unknown) as number,
+              total: parseInt(combatant.healed),
               note: `${combatant.OverHealPct} OH`,
               extra: [
-                // XXX: coersion
-
-                formatNumber((combatant.enchps as unknown) as number),
+                formatNumber(parseRate(combatant.enchps)),
                 combatant["healed%"],
               ],
             },
             [View.Tanking]: {
               format: formatNumber,
-              // XXX: coersion
-              total: (combatant.damagetaken as unknown) as number,
+              total: parseInt(combatant.damagetaken),
               extra: [
                 `${combatant.ParryPct} parry`,
                 `${combatant.BlockPct} block`,
@@ -459,8 +469,7 @@ class Combatants extends React.Component<CombatantsProps> {
             },
             [View.Deaths]: {
               format: _.identity,
-              // XXX: coersion
-              total: (combatant.deaths as unknown) as number,
+              total: parseInt(combatant.deaths),
               extra: [],
             },
           }[this.props.currentView]
@@ -483,7 +492,6 @@ class Combatants extends React.Component<CombatantsProps> {
   }
 }
 
-// XXX: namespace
 interface DamageMeterProps {
   data: DataUpdateEmbellished;
   playerName: string | null;
@@ -519,11 +527,11 @@ class DamageMeter extends React.Component<DamageMeterProps, DamageMeterState> {
   }
 
   handleViewChange() {
-    const views = Object.keys(View);
+    const views = Object.values(View);
     const index = views.indexOf(this.state.currentView);
 
     this.setState({
-      currentView: views[(index + 1) % views.length] as View,
+      currentView: views[(index + 1) % views.length],
     });
   }
 
@@ -531,20 +539,18 @@ class DamageMeter extends React.Component<DamageMeterProps, DamageMeterState> {
     const encounter = this.props.data;
 
     const stat = {
-      [View.Damage]: "damage",
-      [View.Healing]: "healed",
-      [View.Tanking]: "damagetaken",
-      [View.Uptime]: "uptime",
-      [View.Deaths]: "deaths",
-    }[this.state.currentView] as keyof Combatant;
+      [View.Damage]: (c: CombatantEmbellished) => parseInt(c.damage),
+      [View.Healing]: (c: CombatantEmbellished) => parseInt(c.healed),
+      [View.Tanking]: (c: CombatantEmbellished) => parseInt(c.damagetaken),
+      [View.Uptime]: (c: CombatantEmbellished) => c.uptime,
+      [View.Deaths]: (c: CombatantEmbellished) => parseInt(c.deaths),
+    }[this.state.currentView];
 
     const self = encounter.Combatant[this.props.playerName ?? YOU];
 
     const combatants = _.sortBy(
-      // XXX: coersion
-      _.filter(encounter.Combatant, (d) => parseInt(d[stat] as string) > 0),
-      // XXX: coersion
-      (d) => -parseInt(d[stat] as string)
+      _.filter(encounter.Combatant, (d) => stat(d) > 0),
+      (d) => -stat(d)
     );
 
     return (
@@ -571,12 +577,11 @@ class DamageMeter extends React.Component<DamageMeterProps, DamageMeterState> {
   }
 }
 
-// XXX: namespace
 interface DebuggerProps {
   data: DataUpdateEmbellished;
 }
 
-class Debugger extends React.Component<DebuggerProps, {}> {
+class Debugger extends React.PureComponent<DebuggerProps> {
   constructor(props: DebuggerProps) {
     super(props);
   }
@@ -590,38 +595,20 @@ class Debugger extends React.Component<DebuggerProps, {}> {
   }
 }
 
-// XXX: namespace
 interface LogDataActivity {
-  castStart: number | null;
-  // XXX: Date
-  lastCredit: number;
-  uptime: number;
+  castStart: Date | null;
+  lastCredit: Date;
+  uptime: Span;
 }
 
-interface LogDataS {
-  encounterStart: number;
-  lastServerTime: number;
+class LogData {
+  encounterStart: Date;
+  lastServerTime: Date;
   activity: {
     [name: string]: LogDataActivity;
   };
-}
 
-class LogData implements LogDataS {
-  // XXX: Why duplicate?
-  // XXX: !
-  encounterStart!: number;
-  // XXX: !
-  lastServerTime!: number;
-  // XXX: !
-  activity!: {
-    [name: string]: {
-      castStart: number | null;
-      lastCredit: number;
-      uptime: number;
-    };
-  };
-
-  static startNew({ encounterStart }: { encounterStart: number }) {
+  static startNew({ encounterStart }: { encounterStart: Date }) {
     return new this({
       encounterStart,
       lastServerTime: encounterStart,
@@ -629,24 +616,22 @@ class LogData implements LogDataS {
     });
   }
 
-  // XXX: any
-  constructor(attrs: any) {
-    Object.assign(this, attrs);
+  constructor({ encounterStart, lastServerTime, activity }: Struct<LogData>) {
+    this.encounterStart = encounterStart;
+    this.lastServerTime = lastServerTime;
+    this.activity = activity;
   }
 
   encounterDuration() {
-    return this.lastServerTime - this.encounterStart;
+    return dateDiff(this.lastServerTime, this.encounterStart);
   }
 
   uptimeFor(name: string) {
     return this.activity[name]?.uptime ?? 0;
   }
 
-  updateTime(serverTime: number) {
-    // XXX: coersion
-    return new (this.constructor as any)(
-      fset(this, { lastServerTime: serverTime })
-    );
+  updateTime(serverTime: Date) {
+    return new LogData(fset(this, { lastServerTime: serverTime }));
   }
 
   updateActivity(
@@ -655,13 +640,11 @@ class LogData implements LogDataS {
   ) {
     const record = this.activity[sourceName] ?? {
       castStart: null,
-      // XXX: coersion
-      lastCredit: (new Date(0) as unknown) as number,
+      lastCredit: new Date(0),
       uptime: 0,
     };
 
-    // XXX: coersion
-    return new (this.constructor as any)(
+    return new LogData(
       fset(this, {
         activity: fset(this.activity, { [sourceName]: f(record) }),
       })
@@ -669,7 +652,6 @@ class LogData implements LogDataS {
   }
 }
 
-// XXX: namespace
 interface AppProps {}
 
 interface AppState {
@@ -678,7 +660,7 @@ interface AppState {
   history: Array<DataUpdateEmbellished>;
   selectedEncounter: DataUpdateEmbellished | null;
   rollingLogData: LogData | null;
-  serverTime: number;
+  serverTime: Date;
   lastLogLine: number | null;
 }
 
@@ -694,37 +676,40 @@ class App extends React.Component<AppProps, AppState> {
       history: [],
       selectedEncounter: null,
       rollingLogData: null,
-      // XXX: coersion / wrong type
-      serverTime: (new Date(0) as unknown) as number,
+      serverTime: new Date(0),
       lastLogLine: null,
     };
   }
 
   componentDidMount() {
-    // XXX: coersion
-    document.addEventListener("onLogLine", (e) => this.onLogLine(e as any));
-    document.addEventListener("onOverlayDataUpdate", (e) =>
-      // XXX: coersion
-      this.onOverlayDataUpdate(e as any)
-    );
-    document.addEventListener("onOverlayStateUpdate", (e) =>
-      // XXX: coersion
-      this.onOverlayStateUpdate(e as any)
-    );
+    // Because TypeScript DOM types don't support CustomEvents by default
+    const addEventListener = <T,>(
+      name: string,
+      f: (_: CustomEvent<T>) => void
+    ) => {
+      document.addEventListener(name, f.bind(this) as EventListener);
+    };
+
+    addEventListener("onLogLine", this.onLogLine);
+    addEventListener("onOverlayDataUpdate", this.onOverlayDataUpdate);
+    addEventListener("onOverlayStateUpdate", this.onOverlayStateUpdate);
+
+    const withLoad = (key: string, f: (_: string) => void) => {
+      const value = localStorage.getItem(key);
+      if (value) f(value);
+    };
 
     try {
-      const playerName = localStorage.getItem(App.PLAYER_NAME_KEY);
-      if (playerName) {
+      withLoad(App.PLAYER_NAME_KEY, (playerName) => {
         this.setState({ playerName });
-      }
+      });
 
-      // XXX: coersion
-      const history = JSON.parse(
-        localStorage.getItem(App.HISTORY_KEY) as string
-      );
-      if (history) {
-        this.setState({ currentEncounter: history[0], history: history });
-      }
+      withLoad(App.HISTORY_KEY, (payload) => {
+        const history = JSON.parse(payload);
+        if (history) {
+          this.setState({ currentEncounter: history[0], history: history });
+        }
+      });
     } catch (ex) {
       console.error(`Couldn't load state: ${ex}`);
     }
@@ -747,18 +732,20 @@ class App extends React.Component<AppProps, AppState> {
     let { history } = this.state;
 
     const isActive = (enc: DataUpdate | null) => enc?.isActive === "true";
-    const duration = (enc: DataUpdate | null) => enc?.Encounter?.DURATION;
+    const duration = (enc: DataUpdate | null) => enc?.Encounter.DURATION;
 
     // Encounter started
     if (!isActive(this.state.currentEncounter) && isActive(currentEncounter)) {
-      // XXX: coersion
-      const updateLag = performance.now() - (this.state.lastLogLine as number);
-      this.setState({
-        selectedEncounter: null,
-        rollingLogData: LogData.startNew({
-          encounterStart: this.state.serverTime + updateLag,
-        }),
-      });
+      // XXX: lastLogLine / serverTime as null
+      if (this.state.lastLogLine !== null && this.state.serverTime !== null) {
+        const updateLag = performance.now() - this.state.lastLogLine;
+        this.setState({
+          selectedEncounter: null,
+          rollingLogData: LogData.startNew({
+            encounterStart: dateAdd(this.state.serverTime, updateLag),
+          }),
+        });
+      }
     }
 
     // Only use our latest log data if the encounter's timer advanced. It's
@@ -767,33 +754,27 @@ class App extends React.Component<AppProps, AppState> {
     // log data we applied is the most semantically correct one.
     const logData =
       duration(this.state.currentEncounter) === duration(currentEncounter) &&
-      // XXX: coersion
-      (this.state.currentEncounter as DataUpdateEmbellished).logData !== null
-        ? // XXX: coersion
+      this.state.currentEncounter?.logData !== null
+        ? // XXX: Extra null check implied by above
           (this.state.currentEncounter as DataUpdateEmbellished).logData
         : this.state.rollingLogData;
 
     // This could be null if you reloaded the overlay mid-combat.
-    if (logData !== null)
-      // XXX: coersion
-      this.embellish(currentEncounter as DataUpdateEmbellished, logData);
+    if (logData !== null) this.embellish(currentEncounter, logData);
+    // XXX: mutation doesn't work well with types
+    const embellishedEncounter = currentEncounter as DataUpdateEmbellished;
 
     // Encounter ended
     if (
       isActive(this.state.currentEncounter) &&
-      // XXX: coersion
-      !isActive(currentEncounter as DataUpdateEmbellished)
+      !isActive(embellishedEncounter)
     ) {
-      // XXX: coersion
-      history = [currentEncounter as DataUpdateEmbellished]
-        .concat(history)
-        .slice(0, 10);
+      history = [embellishedEncounter].concat(history).slice(0, 10);
 
       localStorage.setItem(App.HISTORY_KEY, JSON.stringify(history));
     }
 
-    // XXX: coersion
-    this.setState({ currentEncounter, history } as any);
+    this.setState({ currentEncounter: embellishedEncounter, history });
   }
 
   setPlayerName(playerName: string | null) {
@@ -807,11 +788,7 @@ class App extends React.Component<AppProps, AppState> {
     const [code, timestamp, ...message] = JSON.parse(e.detail);
     // Sometimes the log lines go backwards in time, though I think this is
     // impossible within the codes we use.
-    const serverTime = Math.max(
-      this.state.serverTime,
-      // XXX: coersion
-      (new Date(timestamp) as unknown) as number
-    );
+    const serverTime = dateMax(this.state.serverTime, new Date(timestamp));
     const lastLogLine = performance.now();
 
     const applyUpdate = (
@@ -822,9 +799,8 @@ class App extends React.Component<AppProps, AppState> {
 
       if (this.state.rollingLogData !== null) {
         let rollingLogData = this.state.rollingLogData.updateTime(serverTime);
-        if (sourceName !== undefined) {
-          // XXX: coersion
-          rollingLogData = rollingLogData.updateActivity(sourceName, f as any);
+        if (sourceName !== undefined && f !== undefined) {
+          rollingLogData = rollingLogData.updateActivity(sourceName, f);
         }
         this.setState({ rollingLogData });
       }
@@ -849,13 +825,10 @@ class App extends React.Component<AppProps, AppState> {
         // `GCD`, whichever is greater. If you weren't casting, you get `GCD`
         // worth of uptime credited to you. In both cases, we can't tell how much
         // your GCD is due to spell/skill speed.
-        const wasCasting = castStart !== null;
-        const uptimeCredit = wasCasting
-          ? // XXX: coersion
-            Math.max(GCD, serverTime - (castStart as number))
-          : GCD;
-        // XXX: coersion
-        const creditTime = wasCasting ? (castStart as number) : serverTime;
+        const [uptimeCredit, creditTime] =
+          castStart !== null
+            ? [Math.max(GCD, dateDiff(serverTime, castStart)), castStart]
+            : [GCD, serverTime];
 
         // However, in either case, if `GCD` has not elapsed between the two
         // credit times, the next credit is reduced so as not to double-credit.
@@ -863,7 +836,10 @@ class App extends React.Component<AppProps, AppState> {
         // 3.5s total uptime credit. Another example: if I cast two 2s spells back
         // to back, I will get 4.5s of credit. This is a best approximation with
         // the information we have available.
-        const uptimeOvercredit = Math.max(0, GCD - (creditTime - lastCredit));
+        const uptimeOvercredit = Math.max(
+          0,
+          GCD - dateDiff(creditTime, lastCredit)
+        );
 
         return {
           castStart: null,
@@ -877,11 +853,9 @@ class App extends React.Component<AppProps, AppState> {
   }
 
   onSelectEncounter(index: number | null) {
-    // XXX: coersion
-    if ((index as number) >= 0) {
+    if (index && index >= 0) {
       this.setState({
-        // XXX: coersion
-        selectedEncounter: this.state.history[index as number],
+        selectedEncounter: this.state.history[index],
       });
     } else {
       this.setState({
@@ -890,16 +864,16 @@ class App extends React.Component<AppProps, AppState> {
     }
   }
 
-  // XXX: wrong type
-  embellish(data: DataUpdateEmbellished, logData: LogData) {
+  embellish(dataUnembellished: DataUpdate, logData: LogData) {
     const { playerName } = this.state;
+    // XXX: mutation doesn't work well with types
+    let data = dataUnembellished as DataUpdateEmbellished;
     data.logData = logData;
 
     if (playerName && YOU in data.Combatant) {
       data.Combatant[YOU].isSelf = true;
       data.Combatant[YOU].name = playerName;
-      // XXX: fix
-      data.Combatant[this.state.playerName as string] = data.Combatant[YOU];
+      data.Combatant[playerName] = data.Combatant[YOU];
       delete data.Combatant[YOU];
     }
 
