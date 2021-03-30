@@ -6,6 +6,7 @@ const GCD = 2500;
 const LIMIT_BREAK = "Limit Break";
 const YOU = "YOU";
 
+type Percent = number;
 type Span = number;
 
 type NonMethodKeys<T> = ({
@@ -13,66 +14,105 @@ type NonMethodKeys<T> = ({
 } & { [x: string]: never })[keyof T];
 type Struct<T> = Pick<T, NonMethodKeys<T>>;
 
+type LogLine = string;
+
 interface StateUpdate {
   isLocked: boolean;
 }
 
 interface DataUpdate {
-  Encounter: Encounter;
-  Combatant: { [name: string]: Combatant };
+  Encounter: {
+    title: string;
+    DURATION: string;
+    damage: string;
+    encdps: string;
+    healed: string;
+    enchps: string;
+    deaths: string;
+    maxhit: string;
+    maxheal: string;
+  };
+  Combatant: {
+    [name: string]: {
+      name: string;
+      Job: string;
+      ["crithit%"]: string;
+      DirectHitPct: string;
+      CritDirectHitPct: string;
+      ["critheal%"]: string;
+      damage: string;
+      encdps: string;
+      ["damage%"]: string;
+      healed: string;
+      enchps: string;
+      ["healed%"]: string;
+      OverHealPct: string;
+      damagetaken: string;
+      ParryPct: string;
+      BlockPct: string;
+      deaths: string;
+      maxhit: string;
+      maxheal: string;
+    };
+  };
   isActive: "true" | "false";
 }
 
-interface DataUpdateEmbellished extends DataUpdate {
-  Encounter: EncounterEmbellished;
-  Combatant: { [name: string]: CombatantEmbellished };
-  logData: LogData | null;
-}
-
-type LogLine = string;
-
 interface Encounter {
   title: string;
-  DURATION: string;
-  damage: string;
-  encdps: string;
-  healed: string;
-  enchps: string;
-  deaths: string;
-  maxhit: string;
-  maxheal: string;
-}
+  duration: Span;
+  isActive: boolean;
+  stats: {
+    damage: {
+      total: number;
+      perSecond: number;
+    };
+    healing: {
+      total: number;
+      perSecond: number;
+    };
+    deaths: number;
+  };
 
-interface EncounterEmbellished extends Encounter {
-  durationTotal: number;
+  combatants: Array<Combatant>;
+  // XXX: Does logData belong here? It does not round-trip serialization at all.
+  logData: LogData | null;
+  raw: DataUpdate;
 }
 
 interface Combatant {
   name: string;
-  Job: string;
-  ["crithit%"]: string;
-  DirectHitPct: string;
-  CritDirectHitPct: string;
-  ["critheal%"]: string;
-  damage: string;
-  encdps: string;
-  ["damage%"]: string;
-  healed: string;
-  enchps: string;
-  ["healed%"]: string;
-  OverHealPct: string;
-  damagetaken: string;
-  ParryPct: string;
-  BlockPct: string;
-  deaths: string;
-  maxhit: string;
-  maxheal: string;
-}
-
-interface CombatantEmbellished extends Combatant {
-  uptime: number;
-  ["uptime%"]: number;
+  job: string;
   isSelf: boolean;
+  stats: {
+    damage: {
+      total: number;
+      perSecond: number;
+      relative: Percent;
+      max: string;
+      crit: Percent;
+      directHit: Percent;
+      critDirectHit: Percent;
+    };
+    healing: {
+      total: number;
+      perSecond: number;
+      relative: Percent;
+      max: string;
+      overheal: Percent;
+      crit: Percent;
+    };
+    tanking: {
+      total: number;
+      parry: Percent;
+      block: Percent;
+    };
+    uptime: {
+      total: Span;
+      relative: Percent;
+    };
+    deaths: number;
+  };
 }
 
 enum View {
@@ -122,6 +162,14 @@ const parseRate = (s: string): number => {
   }
 };
 
+const parsePercent = (s: string): number => {
+  if (/^[0-9.]+%$/.test(s)) {
+    return parseFloat(s.slice(0, -1)) / 100;
+  } else {
+    return parseFloat(s);
+  }
+};
+
 const formatName = (name: string) => {
   if (name == YOU) {
     return options.you;
@@ -130,10 +178,8 @@ const formatName = (name: string) => {
   }
 };
 
-const formatEncounter = (enc: EncounterEmbellished) => {
-  let time = enc.durationTotal ? enc.durationTotal : parseFloat(enc.DURATION);
-  return `${enc.title} (${formatSpan(time)})`;
-};
+const formatEncounter = (enc: Encounter) =>
+  `${enc.title} (${formatSpan(enc.duration)})`;
 
 const formatNumber = (n: number) => {
   if (n >= 1000000) {
@@ -202,7 +248,7 @@ class CombatantCompact extends React.PureComponent<CombatantCompactProps> {
 }
 
 interface StatsProps {
-  self: CombatantEmbellished;
+  self: Combatant;
 }
 
 class Stats extends React.Component<StatsProps, {}> {
@@ -211,7 +257,7 @@ class Stats extends React.Component<StatsProps, {}> {
 
     const Stat: React.FunctionComponent<{
       label: string;
-      value?: string;
+      value: string;
     }> = (props) =>
       props.value ? (
         <div className="cell">
@@ -225,25 +271,31 @@ class Stats extends React.Component<StatsProps, {}> {
         <div className="extra-row damage">
           <Stat
             label="Damage"
-            value={`${formatNumber(parseInt(self.damage))} (${formatNumber(
-              parseRate(self.encdps)
+            value={`${formatNumber(self.stats.damage.total)} (${formatNumber(
+              self.stats.damage.perSecond
             )})`}
           />
-          <Stat label="Max" value={self.maxhit} />
-          <Stat label="Crit%" value={self["crithit%"]} />
-          <Stat label="Direct%" value={self.DirectHitPct} />
-          <Stat label="DirectCrit%" value={self.CritDirectHitPct} />
+          <Stat label="Max" value={self.stats.damage.max} />
+          <Stat label="Crit%" value={formatPercent(self.stats.damage.crit)} />
+          <Stat
+            label="Direct%"
+            value={formatPercent(self.stats.damage.directHit)}
+          />
+          <Stat
+            label="DirectCrit%"
+            value={formatPercent(self.stats.damage.critDirectHit)}
+          />
         </div>
         <hr />
         <div className="extra-row healing">
           <Stat
             label="Heals"
-            value={`${formatNumber(parseInt(self.healed))} (${formatNumber(
-              parseRate(self.enchps)
+            value={`${formatNumber(self.stats.healing.total)} (${formatNumber(
+              self.stats.healing.perSecond
             )})`}
           />
-          <Stat label="Max" value={self.maxheal} />
-          <Stat label="Crit%" value={self?.["critheal%"]} />
+          <Stat label="Max" value={self.stats.healing.max} />
+          <Stat label="Crit%" value={formatPercent(self.stats.healing.crit)} />
         </div>
       </div>
     );
@@ -251,12 +303,11 @@ class Stats extends React.Component<StatsProps, {}> {
 }
 
 interface HeaderProps {
-  encounter: EncounterEmbellished;
+  encounter: Encounter;
   onSelectEncounter: (index: number | null) => void;
   currentView: View;
-  history: Array<DataUpdateEmbellished>;
+  history: Array<Encounter>;
   onViewChange: () => void;
-  self: CombatantEmbellished;
 }
 
 interface HeaderState {
@@ -271,16 +322,6 @@ class Header extends React.Component<HeaderProps, HeaderState> {
       expanded: false,
       showEncountersList: false,
     };
-  }
-
-  // XXX: Delete?
-  shouldComponentUpdate(nextProps: HeaderProps) {
-    // Will need to add a null check here if we are swapping betwen self and
-    // group. Possibly more null checks as well.
-    if (nextProps.encounter.encdps === "---") {
-      return false;
-    }
-    return true;
   }
 
   toggleStats(value = !this.state.expanded) {
@@ -306,15 +347,17 @@ class Header extends React.Component<HeaderProps, HeaderState> {
 
     const currentViewSummary = {
       [View.Damage]: `Damage (${formatNumber(
-        parseRate(encounter.encdps)
+        encounter.stats.damage.perSecond
       )} dps)`,
       [View.Healing]: `Healing (${formatNumber(
-        parseRate(encounter.enchps)
+        encounter.stats.healing.perSecond
       )} hps)`,
       [View.Tanking]: `Damage Taken`,
       [View.Uptime]: `Uptime`,
-      [View.Deaths]: `Deaths (${parseInt(encounter.deaths)} total)`,
+      [View.Deaths]: `Deaths (${encounter.stats.deaths} total)`,
     }[this.props.currentView];
+
+    const self = _.find(encounter.combatants, ({ isSelf }) => isSelf) ?? null;
 
     return (
       <div
@@ -345,14 +388,16 @@ class Header extends React.Component<HeaderProps, HeaderState> {
                   className="dropdown-menu-item target-name"
                   onClick={() => this.onSelectEncounter(i)}
                 >
-                  {formatEncounter(encounter.Encounter)}
+                  {formatEncounter(encounter)}
                 </div>
               ))}
             </div>
-            <span
-              className={`arrow ${this.state.expanded ? "up" : "down"}`}
-              onClick={() => this.toggleStats()}
-            />
+            {self !== null ? (
+              <span
+                className={`arrow ${this.state.expanded ? "up" : "down"}`}
+                onClick={() => this.toggleStats()}
+              />
+            ) : null}
           </div>
           <div
             className={`ff-header header-right target-name`}
@@ -361,14 +406,14 @@ class Header extends React.Component<HeaderProps, HeaderState> {
             {currentViewSummary}
           </div>
         </div>
-        {this.state.expanded ? <Stats self={this.props.self} /> : null}
+        {this.state.expanded && self !== null ? <Stats self={self} /> : null}
       </div>
     );
   }
 }
 
 interface CombatantsProps {
-  combatants: Array<CombatantEmbellished>;
+  combatants: Array<Combatant>;
   currentView: View;
 }
 
@@ -388,50 +433,50 @@ class Combatants extends React.Component<CombatantsProps> {
 
     const rows = _.take(this.props.combatants, maxRows).map(
       (combatant, rank) => {
-        const actor =
-          combatant.name === LIMIT_BREAK ? "lb" : combatant.Job.toLowerCase();
+        const actor = combatant.name === LIMIT_BREAK ? "lb" : combatant.job;
 
         const stats = _.merge(
           {
             actor,
-            job: combatant.Job || "",
+            // XXX: is job nullable?
+            job: combatant.job || "",
             characterName: combatant.name,
             isSelf: combatant.isSelf,
           },
           {
             [View.Damage]: {
               format: formatNumber,
-              total: parseInt(combatant.damage),
+              total: combatant.stats.damage.total,
               extra: [
-                formatNumber(parseRate(combatant.encdps)),
-                combatant["damage%"],
+                formatNumber(combatant.stats.damage.perSecond),
+                formatPercent(combatant.stats.damage.relative),
               ],
             },
             [View.Healing]: {
               format: formatNumber,
-              total: parseInt(combatant.healed),
-              note: `${combatant.OverHealPct} OH`,
+              total: combatant.stats.healing.total,
+              note: `${formatPercent(combatant.stats.healing.overheal)} OH`,
               extra: [
-                formatNumber(parseRate(combatant.enchps)),
-                combatant["healed%"],
+                formatNumber(combatant.stats.healing.perSecond),
+                formatPercent(combatant.stats.healing.relative),
               ],
             },
             [View.Tanking]: {
               format: formatNumber,
-              total: parseInt(combatant.damagetaken),
+              total: combatant.stats.tanking.total,
               extra: [
-                `${combatant.ParryPct} parry`,
-                `${combatant.BlockPct} block`,
+                `${formatPercent(combatant.stats.tanking.parry)} parry`,
+                `${formatPercent(combatant.stats.tanking.block)} block`,
               ],
             },
             [View.Uptime]: {
               format: formatSpan,
-              total: combatant.uptime,
-              extra: [formatPercent(combatant["uptime%"])],
+              total: combatant.stats.uptime.total,
+              extra: [formatPercent(combatant.stats.uptime.relative)],
             },
             [View.Deaths]: {
               format: _.identity,
-              total: parseInt(combatant.deaths),
+              total: combatant.stats.deaths,
               extra: [],
             },
           }[this.props.currentView]
@@ -455,9 +500,9 @@ class Combatants extends React.Component<CombatantsProps> {
 }
 
 interface DamageMeterProps {
-  data: DataUpdateEmbellished;
+  data: Encounter;
   playerName: string | null;
-  history: Array<DataUpdateEmbellished>;
+  history: Array<Encounter>;
   onSelectEncounter: (index: number | null) => void;
 }
 
@@ -473,21 +518,6 @@ class DamageMeter extends React.Component<DamageMeterProps, DamageMeterState> {
     };
   }
 
-  shouldComponentUpdate(
-    nextProps: DamageMeterProps,
-    nextState: DamageMeterState
-  ) {
-    if (nextProps.data.Encounter.encdps === "---") {
-      return false;
-    }
-
-    if (this.state.currentView !== nextState.currentView) {
-      return true;
-    }
-
-    return true;
-  }
-
   handleViewChange() {
     const views = Object.values(View);
     const index = views.indexOf(this.state.currentView);
@@ -501,26 +531,23 @@ class DamageMeter extends React.Component<DamageMeterProps, DamageMeterState> {
     const encounter = this.props.data;
 
     const stat = {
-      [View.Damage]: (c: CombatantEmbellished) => parseInt(c.damage),
-      [View.Healing]: (c: CombatantEmbellished) => parseInt(c.healed),
-      [View.Tanking]: (c: CombatantEmbellished) => parseInt(c.damagetaken),
-      [View.Uptime]: (c: CombatantEmbellished) => c.uptime,
-      [View.Deaths]: (c: CombatantEmbellished) => parseInt(c.deaths),
+      [View.Damage]: (c: Combatant["stats"]) => c.damage.total,
+      [View.Healing]: (c: Combatant["stats"]) => c.healing.total,
+      [View.Tanking]: (c: Combatant["stats"]) => c.tanking.total,
+      [View.Uptime]: (c: Combatant["stats"]) => c.uptime.total,
+      [View.Deaths]: (c: Combatant["stats"]) => c.deaths,
     }[this.state.currentView];
 
-    const self = encounter.Combatant[this.props.playerName ?? YOU];
-
     const combatants = _.sortBy(
-      _.filter(encounter.Combatant, (d) => stat(d) > 0),
-      (d) => -stat(d)
+      _.filter(encounter.combatants, (d) => stat(d.stats) > 0),
+      (d) => -stat(d.stats)
     );
 
     return (
       <div className="damage-meter">
         <Header
-          encounter={encounter.Encounter}
+          encounter={encounter}
           history={this.props.history}
-          self={self}
           onViewChange={() => this.handleViewChange()}
           onSelectEncounter={this.props.onSelectEncounter}
           currentView={this.state.currentView}
@@ -540,7 +567,7 @@ class DamageMeter extends React.Component<DamageMeterProps, DamageMeterState> {
 }
 
 interface DebuggerProps {
-  data: DataUpdateEmbellished;
+  data: Encounter;
 }
 
 class Debugger extends React.PureComponent<DebuggerProps> {
@@ -557,12 +584,14 @@ class Debugger extends React.PureComponent<DebuggerProps> {
   }
 }
 
+// XXX: readonly
 interface LogDataActivity {
   castStart: Date | null;
   lastCredit: Date;
   uptime: Span;
 }
 
+// XXX: readonly
 class LogData {
   encounterStart: Date;
   lastServerTime: Date;
@@ -618,9 +647,9 @@ interface AppProps {}
 
 interface AppState {
   playerName: string | null;
-  currentEncounter: DataUpdateEmbellished | null;
-  history: Array<DataUpdateEmbellished>;
-  selectedEncounter: DataUpdateEmbellished | null;
+  currentEncounter: Encounter | null;
+  history: Array<Encounter>;
+  selectedEncounter: Encounter | null;
   rollingLogData: LogData | null;
   serverTime: Date;
   lastLogLine: number | null;
@@ -661,20 +690,27 @@ class App extends React.Component<AppProps, AppState> {
       if (value) f(value);
     };
 
-    try {
-      withLoad(App.PLAYER_NAME_KEY, (playerName) => {
-        this.setState({ playerName });
-      });
+    withLoad(App.PLAYER_NAME_KEY, (playerName) => {
+      this.setState({ playerName });
+      // XXX: This is quite a hack, but `this.upgrade` depends on the
+      // playerName, which we enqueue as a state update here, synchronously.
+      Object.assign(this.state, { playerName });
+    });
 
-      withLoad(App.HISTORY_KEY, (payload) => {
-        const history = JSON.parse(payload);
-        if (history) {
-          this.setState({ currentEncounter: history[0], history: history });
-        }
-      });
-    } catch (ex) {
-      console.error(`Couldn't load state: ${ex}`);
-    }
+    withLoad(App.HISTORY_KEY, (payload) => {
+      let history;
+
+      try {
+        history = JSON.parse(payload);
+      } catch (ex) {
+        console.error(`Couldn't load state: ${ex}`);
+      }
+
+      if (history) {
+        history = _.map(history, (e) => this.upgrade(e));
+        this.setState({ currentEncounter: history[0], history: history });
+      }
+    });
   }
 
   onOverlayStateUpdate(e: CustomEvent<StateUpdate>) {
@@ -686,21 +722,22 @@ class App extends React.Component<AppProps, AppState> {
   }
 
   onOverlayDataUpdate(e: CustomEvent<DataUpdate>) {
-    const currentEncounter = e.detail;
+    const update = e.detail;
     // Encounters without combatants can be nearby pulls in public areas that
     // you aren't involved in. Drop those updates unless they include someone.
-    if (_.isEmpty(currentEncounter.Combatant)) return;
+    if (_.isEmpty(update.Combatant)) return;
 
     let { history } = this.state;
 
-    const isActive = (enc: DataUpdate | null) => enc?.isActive === "true";
-    const duration = (enc: DataUpdate | null) => enc?.Encounter.DURATION;
+    const isActive = (enc?: DataUpdate | null) => enc?.isActive === "true";
+    const duration = (enc?: DataUpdate | null) => enc?.Encounter.DURATION;
 
     // Encounter started
-    if (!isActive(this.state.currentEncounter) && isActive(currentEncounter)) {
+    if (!isActive(this.state.currentEncounter?.raw) && isActive(update)) {
       // XXX: lastLogLine / serverTime as null
       if (this.state.lastLogLine !== null && this.state.serverTime !== null) {
         const updateLag = performance.now() - this.state.lastLogLine;
+        // XXX: I didn't realize that this doesn't take place immediately
         this.setState({
           selectedEncounter: null,
           rollingLogData: LogData.startNew({
@@ -715,28 +752,21 @@ class App extends React.Component<AppProps, AppState> {
     // idea is that if we get data updates after the encounter is over, the last
     // log data we applied is the most semantically correct one.
     const logData =
-      duration(this.state.currentEncounter) === duration(currentEncounter) &&
-      this.state.currentEncounter?.logData !== null
-        ? // XXX: Extra null check implied by above
-          (this.state.currentEncounter as DataUpdateEmbellished).logData
+      duration(this.state.currentEncounter?.raw) === duration(update) &&
+      this.state.currentEncounter?.logData != null
+        ? this.state.currentEncounter.logData
         : this.state.rollingLogData;
 
-    // This could be null if you reloaded the overlay mid-combat.
-    if (logData !== null) this.embellish(currentEncounter, logData);
-    // XXX: mutation doesn't work well with types
-    const embellishedEncounter = currentEncounter as DataUpdateEmbellished;
+    const encounter = this.parse(update, logData);
 
     // Encounter ended
-    if (
-      isActive(this.state.currentEncounter) &&
-      !isActive(embellishedEncounter)
-    ) {
-      history = [embellishedEncounter].concat(history).slice(0, 10);
+    if (isActive(this.state.currentEncounter?.raw) && !isActive(update)) {
+      history = [encounter].concat(history).slice(0, 10);
 
       localStorage.setItem(App.HISTORY_KEY, JSON.stringify(history));
     }
 
-    this.setState({ currentEncounter: embellishedEncounter, history });
+    this.setState({ currentEncounter: encounter, history });
   }
 
   setPlayerName(playerName: string | null) {
@@ -826,30 +856,108 @@ class App extends React.Component<AppProps, AppState> {
     }
   }
 
-  embellish(dataUnembellished: DataUpdate, logData: LogData) {
+  parse(data: DataUpdate, logData: LogData | null): Encounter {
     const { playerName } = this.state;
-    // XXX: mutation doesn't work well with types
-    let data = dataUnembellished as DataUpdateEmbellished;
-    data.logData = logData;
-
-    if (playerName && YOU in data.Combatant) {
-      data.Combatant[YOU].isSelf = true;
-      data.Combatant[YOU].name = playerName;
-      data.Combatant[playerName] = data.Combatant[YOU];
-      delete data.Combatant[YOU];
-    }
 
     // This is different from the encounter's notion of duration because ACT
     // may be configured to trim out periods of inactivity.
-    const encounterDuration = logData.encounterDuration();
-    data.Encounter.durationTotal = encounterDuration;
+    const duration =
+      logData?.encounterDuration() || parseInt(data.Encounter.DURATION);
 
-    for (let name in data.Combatant) {
-      let uptime = logData.uptimeFor(name);
-      _.assign(data.Combatant[name], {
-        uptime,
-        ["uptime%"]: Math.min(1, uptime / encounterDuration),
-      });
+    const combatants = _.map(data.Combatant, (combatant) => {
+      const [name, isSelf] =
+        playerName !== null &&
+        (combatant.name === YOU || combatant.name === playerName)
+          ? [playerName, true]
+          : [combatant.name, false];
+
+      const uptime = logData?.uptimeFor(name) || 0;
+
+      return {
+        name,
+        job: combatant.Job.toLowerCase(),
+        isSelf,
+        stats: {
+          damage: {
+            total: parseInt(combatant.damage),
+            perSecond: parseRate(combatant.encdps),
+            relative: parsePercent(combatant["damage%"]),
+            max: combatant.maxhit,
+            crit: parsePercent(combatant["crithit%"]),
+            directHit: parsePercent(combatant.DirectHitPct),
+            critDirectHit: parsePercent(combatant.CritDirectHitPct),
+          },
+          healing: {
+            total: parseInt(combatant.healed),
+            perSecond: parseRate(combatant.enchps),
+            relative: parsePercent(combatant["healed%"]),
+            max: combatant.maxheal,
+            overheal: parsePercent(combatant["OverHealPct"]),
+            crit: parsePercent(combatant["critheal%"]),
+          },
+          tanking: {
+            total: parseInt(combatant.damagetaken),
+            parry: parsePercent(combatant.ParryPct),
+            block: parsePercent(combatant.BlockPct),
+          },
+          uptime: {
+            total: uptime,
+            relative: Math.min(1, uptime / duration),
+          },
+          deaths: parseInt(combatant.deaths),
+        },
+      };
+    });
+
+    return {
+      title: data.Encounter.title,
+      duration,
+      isActive: data.isActive === "true",
+      stats: {
+        damage: {
+          total: parseInt(data.Encounter.damage),
+          perSecond: parseRate(data.Encounter.encdps),
+        },
+        healing: {
+          total: parseInt(data.Encounter.healed),
+          perSecond: parseRate(data.Encounter.enchps),
+        },
+        deaths: parseInt(data.Encounter.deaths),
+      },
+
+      combatants,
+      logData,
+      raw: data,
+    };
+  }
+
+  upgrade(data: object): Encounter {
+    if ("Encounter" in data) {
+      const update = data as any;
+
+      const logData =
+        update.logData != null
+          ? new LogData({
+              encounterStart: new Date(update.logData.encounterStart),
+              lastServerTime: new Date(update.logData.lastServerTime),
+              activity: _.mapValues(update.logData.activity, (activity) => ({
+                castStart:
+                  activity.castStart != null
+                    ? new Date(activity.castStart)
+                    : null,
+                lastCredit: new Date(activity.castStart),
+                uptime: activity.uptime,
+              })),
+            })
+          : null;
+
+      const encounter = this.parse(update, logData);
+
+      return encounter;
+    } else if ("stats" in data) {
+      return data as Encounter;
+    } else {
+      throw Error("Can't upgrade history object");
     }
   }
 
