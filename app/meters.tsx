@@ -202,38 +202,18 @@ class CombatantCompact extends React.PureComponent<CombatantCompactProps> {
 }
 
 interface StatsProps {
-  encounter: EncounterEmbellished;
   self: CombatantEmbellished;
 }
 
-interface StatsState {
-  group: boolean;
-}
-
-class Stats extends React.Component<StatsProps, StatsState> {
-  constructor(props: StatsProps) {
-    super(props);
-    this.state = {
-      group: true,
-    };
-  }
-
-  toggleSource(value = !this.state.group) {
-    this.setState({
-      group: value,
-    });
-  }
-
+class Stats extends React.Component<StatsProps, {}> {
   render() {
-    const self = this.props.self;
-    const dataSource = this.state.group || !self ? this.props.encounter : self;
+    const { self } = this.props;
 
     const Stat: React.FunctionComponent<{
       label: string;
       value?: string;
-      self?: boolean;
     }> = (props) =>
-      props.value && (!props.self || !this.state.group) ? (
+      props.value ? (
         <div className="cell">
           <span className="label ff-header">{props.label}</span>
           <span className="value ff-text">{props.value}</span>
@@ -242,43 +222,28 @@ class Stats extends React.Component<StatsProps, StatsState> {
 
     return (
       <div className="extra-details">
-        <div
-          className="data-set-view-switcher clearfix"
-          onClick={() => this.toggleSource()}
-        >
-          <span
-            className={`data-set-option ${this.state.group ? "active" : ""}`}
-          >
-            G
-          </span>
-          <span
-            className={`data-set-option ${!this.state.group ? "active" : ""}`}
-          >
-            I
-          </span>
-        </div>
         <div className="extra-row damage">
           <Stat
             label="Damage"
-            value={`${formatNumber(
-              parseInt(dataSource.damage)
-            )} (${formatNumber(parseRate(dataSource.encdps))})`}
+            value={`${formatNumber(parseInt(self.damage))} (${formatNumber(
+              parseRate(self.encdps)
+            )})`}
           />
-          <Stat label="Max" value={dataSource.maxhit} />
-          <Stat self label="Crit%" value={self?.["crithit%"]} />
-          <Stat self label="Direct%" value={self?.DirectHitPct} />
-          <Stat self label="DirectCrit%" value={self?.CritDirectHitPct} />
+          <Stat label="Max" value={self.maxhit} />
+          <Stat label="Crit%" value={self["crithit%"]} />
+          <Stat label="Direct%" value={self.DirectHitPct} />
+          <Stat label="DirectCrit%" value={self.CritDirectHitPct} />
         </div>
         <hr />
         <div className="extra-row healing">
           <Stat
             label="Heals"
-            value={`${formatNumber(
-              parseInt(dataSource.healed)
-            )} (${formatNumber(parseRate(dataSource.enchps))})`}
+            value={`${formatNumber(parseInt(self.healed))} (${formatNumber(
+              parseRate(self.enchps)
+            )})`}
           />
-          <Stat label="Max" value={dataSource.maxheal} />
-          <Stat self label="Crit%" value={self?.["critheal%"]} />
+          <Stat label="Max" value={self.maxheal} />
+          <Stat label="Crit%" value={self?.["critheal%"]} />
         </div>
       </div>
     );
@@ -396,9 +361,7 @@ class Header extends React.Component<HeaderProps, HeaderState> {
             {currentViewSummary}
           </div>
         </div>
-        {this.state.expanded ? (
-          <Stats encounter={this.props.encounter} self={this.props.self} />
-        ) : null}
+        {this.state.expanded ? <Stats self={this.props.self} /> : null}
       </div>
     );
   }
