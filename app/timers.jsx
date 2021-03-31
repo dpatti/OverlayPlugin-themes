@@ -30,6 +30,7 @@ const DATA0 = {
     scope: Scope.Enemy,
     targeting: Target.Single,
     job: "blm",
+    sets: ["debug"],
   },
 
   // DAMAGE ================================================================
@@ -40,6 +41,7 @@ const DATA0 = {
     scope: Scope.Enemy,
     targeting: Target.Single,
     job: "nin",
+    sets: ["damage"],
   },
   [0x1d0c]: {
     // Chain Stratagem
@@ -48,6 +50,7 @@ const DATA0 = {
     scope: Scope.Enemy,
     targeting: Target.Single,
     job: "sch",
+    sets: ["damage"],
   },
   [0x40a8]: {
     // Divination
@@ -56,6 +59,7 @@ const DATA0 = {
     scope: Scope.Friendly,
     targeting: Target.Many,
     job: "ast",
+    sets: ["damage"],
   },
 
   [0x1ce4]: {
@@ -65,6 +69,7 @@ const DATA0 = {
     scope: Scope.Friendly,
     targeting: Target.Many,
     job: "mnk",
+    sets: ["damage"],
   },
   [0xde5]: {
     // Battle Litany
@@ -73,6 +78,7 @@ const DATA0 = {
     scope: Scope.Friendly,
     targeting: Target.Many,
     job: "drg",
+    sets: ["damage"],
   },
   [0x3f44]: {
     // Technical Finish (Quadruple)
@@ -81,6 +87,7 @@ const DATA0 = {
     scope: Scope.Friendly,
     targeting: Target.Many,
     job: "dnc",
+    sets: ["damage"],
   },
 
   // DEFENSIVE =============================================================
@@ -91,6 +98,7 @@ const DATA0 = {
     scope: Scope.Enemy,
     targeting: Target.Single,
     job: "blm",
+    sets: ["mitigation", "debug"],
   },
   [0x3e8c]: {
     // Shield Samba
@@ -99,6 +107,7 @@ const DATA0 = {
     scope: Scope.Friendly,
     targeting: Target.Many,
     job: "dnc",
+    sets: ["mitigation"],
   },
   [0x3f18]: {
     // Superbolide
@@ -107,6 +116,7 @@ const DATA0 = {
     scope: Scope.Friendly,
     targeting: Target.Self,
     job: "gnb",
+    sets: ["mitigation"],
   },
   [0x3f20]: {
     // Heart of Light
@@ -115,15 +125,35 @@ const DATA0 = {
     scope: Scope.Friendly,
     targeting: Target.Many,
     job: "gnb",
+    sets: ["mitigation"],
   },
 
   // HEALING ===============================================================
 };
 
-const DEV = true;
-const DATA = DEV
-  ? DATA0
-  : _.pick(DATA0, [0x8d2, 0x1d0c, 0x40a8, 0x1ce4, 0xde5, 0x3f44]);
+const options = ((search) => {
+  const options = {};
+
+  if (search[0] === "?") {
+    search
+      .slice(1)
+      .split("&")
+      .map((pair) => pair.split("="))
+      .forEach(([k, v]) => {
+        options[k] = v;
+      });
+  }
+
+  return {
+    sets: options.sets?.split(",") ?? [],
+    debug: "debug" in options || false,
+  };
+})(document.location.search);
+
+const DATA = _.pickBy(
+  DATA0,
+  ({ sets }) => _.intersection(sets, options.sets).length > 0
+);
 
 class ActionIcon {
   static _cache = {};
