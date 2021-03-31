@@ -126,7 +126,7 @@ enum View {
 const options = ((search) => {
   type dict = { [key: string]: string };
 
-  let options: dict = {};
+  const options: dict = {};
 
   if (search[0] === "?") {
     search
@@ -154,7 +154,7 @@ const dateMax = (a: Date, b: Date): Date => (a > b ? new Date(a) : new Date(b));
 
 // When duration is 0, ACT sends the dps as the string "∞"
 const parseRate = (s: string): number => {
-  let n = parseFloat(s);
+  const n = parseFloat(s);
   if (Number.isNaN(n)) {
     return 0;
   } else {

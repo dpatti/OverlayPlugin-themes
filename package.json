@@ -26,6 +26,7 @@
   },
   "scripts": {
     "build": "webpack",
-    "serve": "webpack serve"
+    "serve": "webpack serve",
+    "test": "tsc && eslint app && prettier --check app"
   }
 }
