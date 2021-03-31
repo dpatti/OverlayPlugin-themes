@@ -6,7 +6,11 @@
     "strict": true,
     "isolatedModules": false,
     "esModuleInterop": true,
-    "jsx": "react"
+    "jsx": "react",
+    "module": "es6",
+    "moduleResolution": "node",
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   },
   "include": ["app"]
 }

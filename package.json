@@ -12,8 +12,10 @@
     "@babel/preset-typescript": "^7.13.0",
     "@types/lodash": "^4.14.168",
     "@types/react": "^17.0.3",
+    "@types/react-dom": "^17.0.3",
     "babel-loader": "^8.2.2",
     "eslint": "^7.19.0",
+    "eslint-config-prettier": "^8.1.0",
     "eslint-plugin-react": "^7.22.0",
     "lodash": "^4.17.21",
     "prettier": "^2.2.1",
@@ -27,6 +29,6 @@
   "scripts": {
     "build": "webpack",
     "serve": "webpack serve",
-    "test": "tsc && eslint app && prettier --check app"
+    "test": "tsc && eslint --ext ts,tsx app && prettier --check app"
   }
 }

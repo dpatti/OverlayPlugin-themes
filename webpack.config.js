@@ -2,13 +2,16 @@ const path = require("path");
 
 module.exports = {
   mode: "development",
-  entry: "./app/index.js",
+  entry: "./app/index.ts",
   output: {
     filename: "app.js",
     path: path.resolve(__dirname, "releases/dev"),
   },
   module: {
-    rules: [{ test: /\.[jt]sx$/, use: "babel-loader" }],
+    rules: [{ test: /\.[jt]sx?$/, use: "babel-loader" }],
+  },
+  resolve: {
+    extensions: [".tsx", ".ts", ".js"],
   },
   devServer: {
     contentBase: "./releases/dev",

@@ -1,62 +1,12 @@
 import _ from "lodash";
 import React from "react";
+import * as ACT from "./act";
+import { Struct, Percent, Span, addEventListener, parseQuery } from "./util";
 
 const GCD = 2500;
 
 const LIMIT_BREAK = "Limit Break";
 const YOU = "YOU";
-
-type Percent = number;
-type Span = number;
-
-type NonMethodKeys<T> = ({
-  [P in keyof T]: T[P] extends Function ? never : P;
-} & { [x: string]: never })[keyof T];
-type Struct<T> = Pick<T, NonMethodKeys<T>>;
-
-type LogLine = string;
-
-interface StateUpdate {
-  isLocked: boolean;
-}
-
-interface DataUpdate {
-  Encounter: {
-    title: string;
-    DURATION: string;
-    damage: string;
-    encdps: string;
-    healed: string;
-    enchps: string;
-    deaths: string;
-    maxhit: string;
-    maxheal: string;
-  };
-  Combatant: {
-    [name: string]: {
-      name: string;
-      Job: string;
-      ["crithit%"]: string;
-      DirectHitPct: string;
-      CritDirectHitPct: string;
-      ["critheal%"]: string;
-      damage: string;
-      encdps: string;
-      ["damage%"]: string;
-      healed: string;
-      enchps: string;
-      ["healed%"]: string;
-      OverHealPct: string;
-      damagetaken: string;
-      ParryPct: string;
-      BlockPct: string;
-      deaths: string;
-      maxhit: string;
-      maxheal: string;
-    };
-  };
-  isActive: "true" | "false";
-}
 
 interface Encounter {
   title: string;
@@ -77,7 +27,7 @@ interface Encounter {
   combatants: Array<Combatant>;
   // XXX: Does logData belong here? It does not round-trip serialization at all.
   logData: LogData | null;
-  raw: DataUpdate;
+  raw: ACT.DataUpdate;
 }
 
 interface Combatant {
@@ -123,34 +73,14 @@ enum View {
   Deaths = "Deaths",
 }
 
-const options = ((search) => {
-  type dict = { [key: string]: string };
-
-  const options: dict = {};
-
-  if (search[0] === "?") {
-    search
-      .slice(1)
-      .split("&")
-      .map((pair) => pair.split("="))
-      .forEach(([k, v]) => {
-        options[k] = v;
-      });
-  }
-
-  return {
-    you: options.you?.replace(/_/g, " ") || YOU,
-    debug: "debug" in options || false,
-  };
-})(document.location.search);
+const options = parseQuery((options) => ({
+  you: options.you?.replace(/_/g, " ") || YOU,
+  debug: "debug" in options || false,
+}));
 
 // helper to functionally set a key in an object by returning a new copy
 const fset = <A, B>(obj: A, extensions: B): A & B =>
   _.defaults(extensions, obj);
-
-const dateAdd = (a: Date, b: Span): Date => new Date(a.getTime() + b);
-const dateDiff = (a: Date, b: Date): Span => a.getTime() - b.getTime();
-const dateMax = (a: Date, b: Date): Date => (a > b ? new Date(a) : new Date(b));
 
 // When duration is 0, ACT sends the dps as the string "∞"
 const parseRate = (s: string): number => {
@@ -576,7 +506,7 @@ class Debugger extends React.PureComponent<DebuggerProps> {
   }
 
   render() {
-    const css = {
+    const css: React.CSSProperties = {
       overflowY: "scroll",
       maxHeight: "250px",
     };
@@ -584,19 +514,17 @@ class Debugger extends React.PureComponent<DebuggerProps> {
   }
 }
 
-// XXX: readonly
 interface LogDataActivity {
-  castStart: Date | null;
-  lastCredit: Date;
-  uptime: Span;
+  readonly castStart: Date | null;
+  readonly lastCredit: Date;
+  readonly uptime: Span;
 }
 
-// XXX: readonly
 class LogData {
-  encounterStart: Date;
-  lastServerTime: Date;
-  activity: {
-    [name: string]: LogDataActivity;
+  readonly encounterStart: Date;
+  readonly lastServerTime: Date;
+  readonly activity: {
+    readonly [name: string]: LogDataActivity;
   };
 
   static startNew({ encounterStart }: { encounterStart: Date }) {
@@ -614,7 +542,7 @@ class LogData {
   }
 
   encounterDuration() {
-    return dateDiff(this.lastServerTime, this.encounterStart);
+    return Date.diff(this.lastServerTime, this.encounterStart);
   }
 
   uptimeFor(name: string) {
@@ -656,8 +584,8 @@ interface AppState {
 }
 
 class App extends React.Component<AppProps, AppState> {
-  static HISTORY_KEY = "meters";
-  static PLAYER_NAME_KEY = "playerName";
+  static readonly HISTORY_KEY = "meters";
+  static readonly PLAYER_NAME_KEY = "playerName";
 
   constructor(props: AppProps) {
     super(props);
@@ -673,17 +601,13 @@ class App extends React.Component<AppProps, AppState> {
   }
 
   componentDidMount() {
-    // Because TypeScript DOM types don't support CustomEvents by default
-    const addEventListener = <T,>(
-      name: string,
-      f: (_: CustomEvent<T>) => void
-    ) => {
-      document.addEventListener(name, f.bind(this) as EventListener);
-    };
-
-    addEventListener("onLogLine", this.onLogLine);
-    addEventListener("onOverlayDataUpdate", this.onOverlayDataUpdate);
-    addEventListener("onOverlayStateUpdate", this.onOverlayStateUpdate);
+    addEventListener<ACT.LogLine>("onLogLine", (e) => this.onLogLine(e));
+    addEventListener<ACT.DataUpdate>("onOverlayDataUpdate", (e) =>
+      this.onOverlayDataUpdate(e)
+    );
+    addEventListener<ACT.StateUpdate>("onOverlayStateUpdate", (e) =>
+      this.onOverlayStateUpdate(e)
+    );
 
     const withLoad = (key: string, f: (_: string) => void) => {
       const value = localStorage.getItem(key);
@@ -713,7 +637,7 @@ class App extends React.Component<AppProps, AppState> {
     });
   }
 
-  onOverlayStateUpdate(e: CustomEvent<StateUpdate>) {
+  onOverlayStateUpdate(e: CustomEvent<ACT.StateUpdate>) {
     if (!e.detail.isLocked) {
       document.documentElement.classList.add("resizable");
     } else {
@@ -721,7 +645,7 @@ class App extends React.Component<AppProps, AppState> {
     }
   }
 
-  onOverlayDataUpdate(e: CustomEvent<DataUpdate>) {
+  onOverlayDataUpdate(e: CustomEvent<ACT.DataUpdate>) {
     const update = e.detail;
     // Encounters without combatants can be nearby pulls in public areas that
     // you aren't involved in. Drop those updates unless they include someone.
@@ -729,8 +653,8 @@ class App extends React.Component<AppProps, AppState> {
 
     let { history } = this.state;
 
-    const isActive = (enc?: DataUpdate | null) => enc?.isActive === "true";
-    const duration = (enc?: DataUpdate | null) => enc?.Encounter.DURATION;
+    const isActive = (enc?: ACT.DataUpdate | null) => enc?.isActive === "true";
+    const duration = (enc?: ACT.DataUpdate | null) => enc?.Encounter.DURATION;
 
     // Encounter started
     if (!isActive(this.state.currentEncounter?.raw) && isActive(update)) {
@@ -741,7 +665,7 @@ class App extends React.Component<AppProps, AppState> {
         this.setState({
           selectedEncounter: null,
           rollingLogData: LogData.startNew({
-            encounterStart: dateAdd(this.state.serverTime, updateLag),
+            encounterStart: this.state.serverTime.add(updateLag),
           }),
         });
       }
@@ -776,11 +700,11 @@ class App extends React.Component<AppProps, AppState> {
     }
   }
 
-  onLogLine(e: CustomEvent<LogLine>) {
+  onLogLine(e: CustomEvent<ACT.LogLine>) {
     const [code, timestamp, ...message] = JSON.parse(e.detail);
     // Sometimes the log lines go backwards in time, though I think this is
     // impossible within the codes we use.
-    const serverTime = dateMax(this.state.serverTime, new Date(timestamp));
+    const serverTime = Date.max(this.state.serverTime, new Date(timestamp));
     const lastLogLine = performance.now();
 
     const applyUpdate = (
@@ -819,7 +743,7 @@ class App extends React.Component<AppProps, AppState> {
         // your GCD is due to spell/skill speed.
         const [uptimeCredit, creditTime] =
           castStart !== null
-            ? [Math.max(GCD, dateDiff(serverTime, castStart)), castStart]
+            ? [Math.max(GCD, Date.diff(serverTime, castStart)), castStart]
             : [GCD, serverTime];
 
         // However, in either case, if `GCD` has not elapsed between the two
@@ -830,7 +754,7 @@ class App extends React.Component<AppProps, AppState> {
         // the information we have available.
         const uptimeOvercredit = Math.max(
           0,
-          GCD - dateDiff(creditTime, lastCredit)
+          GCD - Date.diff(creditTime, lastCredit)
         );
 
         return {
@@ -856,7 +780,7 @@ class App extends React.Component<AppProps, AppState> {
     }
   }
 
-  parse(data: DataUpdate, logData: LogData | null): Encounter {
+  parse(data: ACT.DataUpdate, logData: LogData | null): Encounter {
     const { playerName } = this.state;
 
     // This is different from the encounter's notion of duration because ACT

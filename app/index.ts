@@ -1,8 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom";
 
-import Meters from "./meters.tsx";
-import Timers from "./timers.jsx";
+import Meters from "./meters";
+import Timers from "./timers";
 
 const App = /\?timers/.test(document.location.search) ? Timers : Meters;
 
