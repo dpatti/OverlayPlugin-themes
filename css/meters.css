@@ -45,13 +45,6 @@ ul {
     padding: 0 6px 6px;
 }
 
-.header {
-}
-
-.header-right {
-    float: right;
-}
-
 .view-color.damage  { --view-color: #2a81d7; }
 .view-color.healing { --view-color: #039158; }
 .view-color.tanking { --view-color: #ca5e4e; }
@@ -59,15 +52,14 @@ ul {
 .view-color.deaths  { --view-color: #9d807b; }
 
 .encounter-header {
-    display:block;
+    display: flex;
+    justify-content: space-between;
 
     border-top: 3px solid var(--view-color);
     padding: 4px 6px 6px 6px;
     font-size: 12px;
-    -webkit-user-select: none;
 }
 .encounter-data {
-    -webkit-user-select: initial;
     display: inline-block;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -120,7 +112,6 @@ ul {
 .target-name {
     cursor: pointer;
     font-weight: 400;
-    margin-right: 4px;
     position: relative;
 }
 .target-name:hover {
@@ -271,6 +262,7 @@ li:last-child {
     display: inline-block;
     height: 1em;
     width: 1em;
+    margin-left: 4px;
 }
 
 .arrow:after {
@@ -294,10 +286,6 @@ li:last-child {
     border-bottom-color: #fff;
 }
 
-.hidden {
-    display: none;
-}
-
 .dropdown-parent {
     position: relative;
 }
@@ -308,10 +296,17 @@ li:last-child {
     margin-top: 0.5em;
     padding: 2px 4px;
     z-index: 100;
+    min-width: 100%;
+}
+.dropdown-menu.right {
+  right: 0;
 }
 
 .dropdown-menu-item {
   padding: 4px 0;
+}
+.dropdown-menu.right > .dropdown-menu-item {
+  text-align: right;
 }
 
 .clearfix:before,

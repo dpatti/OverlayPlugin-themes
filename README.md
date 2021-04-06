@@ -54,7 +54,6 @@ yarn serve
 
 - meters: uptime tracking to be limited to spells with damage/healing components
   so that, e.g., a BLM spamming Umbral Soul isn't at 100% uptime.
-- meters: change meter selector to drop down instead of click-to-cycle
 - meters: add meters for ressurections cast
 - meters: only show personal stats in the stats pane
 - meters: have a dual-bar setup for visualizing healing vs overhealing

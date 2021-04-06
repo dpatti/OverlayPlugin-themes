@@ -237,33 +237,33 @@ interface HeaderProps {
   onSelectEncounter: (index: number | null) => void;
   currentView: View;
   history: Array<Encounter>;
-  onViewChange: () => void;
+  onSelectView: (_: View) => void;
 }
 
 interface HeaderState {
-  expanded: boolean;
-  showEncountersList: boolean;
+  showStats: boolean;
+  showEncounterSelector: boolean;
+  showViewSelector: boolean;
 }
 
 class Header extends React.Component<HeaderProps, HeaderState> {
   constructor(props: HeaderProps) {
     super(props);
     this.state = {
-      expanded: false,
-      showEncountersList: false,
+      showStats: false,
+      showEncounterSelector: false,
+      showViewSelector: false,
     };
   }
 
-  toggleStats(value = !this.state.expanded) {
-    this.setState({
-      expanded: value,
-    });
+  toggleStats(value = !this.state.showStats) {
+    this.setState({ showStats: value });
   }
 
-  // Show dropdown for list of encounters
-  toggleEncounterMenu(value = !this.state.showEncountersList) {
+  toggleEncounterMenu(value = !this.state.showEncounterSelector) {
     this.setState({
-      showEncountersList: value,
+      showEncounterSelector: value,
+      showViewSelector: false,
     });
   }
 
@@ -272,10 +272,31 @@ class Header extends React.Component<HeaderProps, HeaderState> {
     this.props.onSelectEncounter(index);
   }
 
+  toggleViewSelector(value = !this.state.showViewSelector) {
+    this.setState({
+      showEncounterSelector: false,
+      showViewSelector: value,
+    });
+  }
+
+  onSelectView(view: View) {
+    this.toggleViewSelector(false);
+    this.props.onSelectView(view);
+  }
+
   render() {
     const encounter = this.props.encounter;
+    const encounters = [
+      { label: "Current Encounter", id: null },
+      ...this.props.history.map((encounter, id) => ({
+        label: formatEncounter(encounter),
+        id,
+      })),
+    ];
 
-    const currentViewSummary = {
+    const self = _.find(encounter.combatants, ({ isSelf }) => isSelf) ?? null;
+
+    const viewSummary = {
       [View.Damage]: `Damage (${formatNumber(
         encounter.stats.damage.perSecond
       )} dps)`,
@@ -285,58 +306,64 @@ class Header extends React.Component<HeaderProps, HeaderState> {
       [View.Tanking]: `Damage Taken`,
       [View.Uptime]: `Uptime`,
       [View.Deaths]: `Deaths (${encounter.stats.deaths} total)`,
-    }[this.props.currentView];
-
-    const self = _.find(encounter.combatants, ({ isSelf }) => isSelf) ?? null;
+    };
+    const currentViewSummary = viewSummary[this.props.currentView];
 
     return (
       <div
         className={`header view-color ${this.props.currentView.toLowerCase()}`}
       >
         <div className="encounter-header">
-          <div className="encounter-data ff-header">
+          <div className="encounter-data ff-header dropdown-parent">
             <span
-              className="target-name dropdown-parent"
+              className="target-name"
               onClick={() => this.toggleEncounterMenu()}
             >
               {formatEncounter(encounter)}
             </span>
-            <div
-              className={`dropdown-menu encounters-list-dropdown ${
-                this.state.showEncountersList ? "" : "hidden"
-              }`}
-            >
-              <div
-                className="dropdown-menu-item target-name"
-                onClick={() => this.onSelectEncounter(null)}
-              >
-                Current Fight
+            {this.state.showEncounterSelector ? (
+              <div className={`dropdown-menu encounters-list-dropdown`}>
+                {encounters.map(({ label, id }, i) => (
+                  <div
+                    key={i}
+                    className="dropdown-menu-item target-name"
+                    onClick={() => this.onSelectEncounter(id)}
+                  >
+                    {label}
+                  </div>
+                ))}
               </div>
-              {this.props.history.map((encounter, i) => (
-                <div
-                  key={i}
-                  className="dropdown-menu-item target-name"
-                  onClick={() => this.onSelectEncounter(i)}
-                >
-                  {formatEncounter(encounter)}
-                </div>
-              ))}
-            </div>
+            ) : null}
             {self !== null ? (
               <span
-                className={`arrow ${this.state.expanded ? "up" : "down"}`}
+                className={`arrow ${this.state.showStats ? "up" : "down"}`}
                 onClick={() => this.toggleStats()}
               />
             ) : null}
           </div>
-          <div
-            className={`ff-header header-right target-name`}
-            onClick={this.props.onViewChange}
-          >
-            {currentViewSummary}
+          <div className="encounter-data ff-header dropdown-parent">
+            <span
+              className="target-name"
+              onClick={() => this.toggleViewSelector()}
+            >
+              {currentViewSummary}
+            </span>
+            {this.state.showViewSelector ? (
+              <div className={`dropdown-menu right view-list-dropdown`}>
+                {Object.entries(View).map(([key, value]) => (
+                  <div
+                    className="dropdown-menu-item target-name"
+                    key={key}
+                    onClick={() => this.onSelectView(value)}
+                  >
+                    {viewSummary[value]}
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
-        {this.state.expanded && self !== null ? <Stats self={self} /> : null}
+        {this.state.showStats && self !== null ? <Stats self={self} /> : null}
       </div>
     );
   }
@@ -448,13 +475,8 @@ class DamageMeter extends React.Component<DamageMeterProps, DamageMeterState> {
     };
   }
 
-  handleViewChange() {
-    const views = Object.values(View);
-    const index = views.indexOf(this.state.currentView);
-
-    this.setState({
-      currentView: views[(index + 1) % views.length],
-    });
+  handleViewChange(currentView: View) {
+    this.setState({ currentView });
   }
 
   render() {
@@ -478,7 +500,7 @@ class DamageMeter extends React.Component<DamageMeterProps, DamageMeterState> {
         <Header
           encounter={encounter}
           history={this.props.history}
-          onViewChange={() => this.handleViewChange()}
+          onSelectView={(view) => this.handleViewChange(view)}
           onSelectEncounter={this.props.onSelectEncounter}
           currentView={this.state.currentView}
         />
