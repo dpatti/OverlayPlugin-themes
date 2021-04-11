@@ -22,6 +22,7 @@ interface Encounter {
       perSecond: number;
     };
     deaths: number;
+    revives: number;
   };
 
   combatants: Array<Combatant>;
@@ -62,6 +63,7 @@ interface Combatant {
       relative: Percent;
     };
     deaths: number;
+    revives: number;
   };
 }
 
@@ -71,6 +73,7 @@ enum View {
   Tanking = "Tanking",
   Uptime = "Uptime",
   Deaths = "Deaths",
+  Revives = "Revives",
 }
 
 const options = parseQuery((options) => ({
@@ -306,6 +309,7 @@ class Header extends React.Component<HeaderProps, HeaderState> {
       [View.Tanking]: `Damage Taken`,
       [View.Uptime]: `Uptime`,
       [View.Deaths]: `Deaths (${encounter.stats.deaths} total)`,
+      [View.Revives]: `Revives (${encounter.stats.revives} total)`,
     };
     const currentViewSummary = viewSummary[this.props.currentView];
 
@@ -436,6 +440,11 @@ class Combatants extends React.Component<CombatantsProps> {
               total: combatant.stats.deaths,
               extra: [],
             },
+            [View.Revives]: {
+              format: _.identity,
+              total: combatant.stats.revives,
+              extra: [],
+            },
           }[this.props.currentView]
         );
 
@@ -488,6 +497,7 @@ class DamageMeter extends React.Component<DamageMeterProps, DamageMeterState> {
       [View.Tanking]: (c: Combatant["stats"]) => c.tanking.total,
       [View.Uptime]: (c: Combatant["stats"]) => c.uptime.total,
       [View.Deaths]: (c: Combatant["stats"]) => c.deaths,
+      [View.Revives]: (c: Combatant["stats"]) => c.revives,
     }[this.state.currentView];
 
     const combatants = _.sortBy(
@@ -540,6 +550,7 @@ interface LogDataActivity {
   readonly castStart: Date | null;
   readonly lastCredit: Date;
   readonly uptime: Span;
+  readonly revives: number;
 }
 
 class LogData {
@@ -583,6 +594,7 @@ class LogData {
       castStart: null,
       lastCredit: new Date(0),
       uptime: 0,
+      revives: 0,
     };
 
     return new LogData(
@@ -757,8 +769,8 @@ class App extends React.Component<AppProps, AppState> {
       applyUpdate(sourceName, (data) => fset(data, { castStart: null }));
     } else if (code === "21" || code === "22") {
       // Action used
-      const [_sourceID, sourceName] = message;
-      applyUpdate(sourceName, ({ castStart, lastCredit, uptime }) => {
+      const [_sourceID, sourceName, actionIDStr] = message;
+      applyUpdate(sourceName, ({ castStart, lastCredit, uptime, revives }) => {
         // If you were casting, you get credit for the duration of that cast or
         // `GCD`, whichever is greater. If you weren't casting, you get `GCD`
         // worth of uptime credited to you. In both cases, we can't tell how much
@@ -779,10 +791,19 @@ class App extends React.Component<AppProps, AppState> {
           GCD - Date.diff(creditTime, lastCredit)
         );
 
+        const actionID = parseInt(actionIDStr, 16);
+        const reviveSpells = {
+          [173]: "Resurrection", // SCH/SMN
+          [7523]: "Verraise", // RDM
+          [125]: "Raise", // WHM
+          [3603]: "Ascend", // AST
+        };
+
         return {
           castStart: null,
           lastCredit: creditTime,
           uptime: uptime + uptimeCredit - uptimeOvercredit,
+          revives: actionID in reviveSpells ? revives + 1 : revives,
         };
       });
     } else if (serverTime > this.state.serverTime) {
@@ -817,7 +838,7 @@ class App extends React.Component<AppProps, AppState> {
           ? [playerName, true]
           : [combatant.name, false];
 
-      const uptime = logData?.uptimeFor(name) || 0;
+      const uptime = logData?.uptimeFor(name) ?? 0;
 
       return {
         name,
@@ -851,6 +872,7 @@ class App extends React.Component<AppProps, AppState> {
             relative: Math.min(1, uptime / duration),
           },
           deaths: parseInt(combatant.deaths),
+          revives: logData?.activity[name]?.revives ?? 0,
         },
       };
     });
@@ -869,6 +891,7 @@ class App extends React.Component<AppProps, AppState> {
           perSecond: parseRate(data.Encounter.enchps),
         },
         deaths: parseInt(data.Encounter.deaths),
+        revives: _.sumBy(combatants, "stats.revives"),
       },
 
       combatants,
@@ -878,6 +901,7 @@ class App extends React.Component<AppProps, AppState> {
   }
 
   upgrade(data: object): Encounter {
+    // XXX: Maybe do something more principled for versioning
     if ("Encounter" in data) {
       const update = data as any;
 
@@ -893,6 +917,7 @@ class App extends React.Component<AppProps, AppState> {
                     : null,
                 lastCredit: new Date(activity.castStart),
                 uptime: activity.uptime,
+                revives: 0,
               })),
             })
           : null;
@@ -901,7 +926,13 @@ class App extends React.Component<AppProps, AppState> {
 
       return encounter;
     } else if ("stats" in data) {
-      return data as Encounter;
+      const d = data as Encounter;
+      d.stats.revives ??= 0;
+      d.combatants.forEach((combatant) => {
+        combatant.stats.revives ??= 0;
+      });
+
+      return d;
     } else {
       throw Error("Can't upgrade history object");
     }

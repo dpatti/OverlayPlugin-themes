@@ -50,6 +50,7 @@ ul {
 .view-color.tanking { --view-color: #ca5e4e; }
 .view-color.uptime  { --view-color: #923399; }
 .view-color.deaths  { --view-color: #9d807b; }
+.view-color.revives { --view-color: #fffdc6; }
 
 .encounter-header {
     display: flex;
