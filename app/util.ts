@@ -1,3 +1,5 @@
+import { UIEvent, UIEventHandler } from "react";
+
 type NonMethodKeys<T> = ({
   [P in keyof T]: T[P] extends Function ? never : P;
 } & { [x: string]: never })[keyof T];
@@ -14,6 +16,11 @@ export const addEventListener = <T>(
   f: (_: CustomEvent<T>) => void
 ) => {
   document.addEventListener(name, f as EventListener);
+};
+
+export const noBubble = (f: UIEventHandler) => (e: UIEvent) => {
+  e.stopPropagation();
+  f(e);
 };
 
 export const parseQuery = <T>(f: (_: Dict) => T): T => {

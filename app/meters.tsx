@@ -1,7 +1,14 @@
 import _ from "lodash";
 import React from "react";
 import * as ACT from "./act";
-import { Struct, Percent, Span, addEventListener, parseQuery } from "./util";
+import {
+  Struct,
+  Percent,
+  Span,
+  addEventListener,
+  noBubble,
+  parseQuery,
+} from "./util";
 
 const GCD = 2500;
 
@@ -263,7 +270,7 @@ class Header extends React.Component<HeaderProps, HeaderState> {
     this.setState({ showStats: value });
   }
 
-  toggleEncounterMenu(value = !this.state.showEncounterSelector) {
+  toggleEncounterSelector(value = !this.state.showEncounterSelector) {
     this.setState({
       showEncounterSelector: value,
       showViewSelector: false,
@@ -271,7 +278,7 @@ class Header extends React.Component<HeaderProps, HeaderState> {
   }
 
   onSelectEncounter(index: number | null) {
-    this.toggleEncounterMenu(false);
+    this.toggleEncounterSelector(false);
     this.props.onSelectEncounter(index);
   }
 
@@ -316,12 +323,16 @@ class Header extends React.Component<HeaderProps, HeaderState> {
     return (
       <div
         className={`header view-color ${this.props.currentView.toLowerCase()}`}
+        onClick={() => {
+          this.toggleViewSelector(false);
+          this.toggleEncounterSelector(false);
+        }}
       >
         <div className="encounter-header">
           <div className="encounter-data ff-header dropdown-parent">
             <span
               className="target-name"
-              onClick={() => this.toggleEncounterMenu()}
+              onClick={noBubble(() => this.toggleEncounterSelector())}
             >
               {formatEncounter(encounter)}
             </span>
@@ -348,7 +359,7 @@ class Header extends React.Component<HeaderProps, HeaderState> {
           <div className="encounter-data ff-header dropdown-parent">
             <span
               className="target-name"
-              onClick={() => this.toggleViewSelector()}
+              onClick={noBubble(() => this.toggleViewSelector())}
             >
               {currentViewSummary}
             </span>
