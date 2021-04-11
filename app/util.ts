@@ -1,3 +1,4 @@
+import _ from "lodash";
 import { UIEvent, UIEventHandler } from "react";
 
 type NonMethodKeys<T> = ({
@@ -9,6 +10,10 @@ export type Dict = { [key: string]: string };
 
 export type Percent = number;
 export type Span = number;
+
+// helper to functionally set a key in an object by returning a new copy
+export const fset = <A, B>(obj: A, extensions: B): A & B =>
+  _.defaults(extensions, obj);
 
 // Because TypeScript DOM types don't support CustomEvents by default
 export const addEventListener = <T>(

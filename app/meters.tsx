@@ -1,11 +1,12 @@
 import _ from "lodash";
 import React from "react";
 import * as ACT from "./act";
+import { LogData, Activity } from "./log-data";
 import {
-  Struct,
   Percent,
   Span,
   addEventListener,
+  fset,
   noBubble,
   parseQuery,
 } from "./util";
@@ -91,10 +92,6 @@ const options = parseQuery((options) => ({
   you: options.you?.replace(/_/g, " ") || YOU,
   debug: "debug" in options || false,
 }));
-
-// helper to functionally set a key in an object by returning a new copy
-const fset = <A, B>(obj: A, extensions: B): A & B =>
-  _.defaults(extensions, obj);
 
 // When duration is 0, ACT sends the dps as the string "∞"
 const parseRate = (s: string): number => {
@@ -555,65 +552,6 @@ class Debugger extends React.PureComponent<DebuggerProps> {
   }
 }
 
-interface LogDataActivity {
-  readonly castStart: Date | null;
-  readonly lastCredit: Date;
-  readonly uptime: Span;
-  readonly revives: number;
-}
-
-class LogData {
-  readonly encounterStart: Date;
-  readonly lastServerTime: Date;
-  readonly activity: {
-    readonly [name: string]: LogDataActivity;
-  };
-
-  static startNew({ encounterStart }: { encounterStart: Date }) {
-    return new this({
-      encounterStart,
-      lastServerTime: encounterStart,
-      activity: {},
-    });
-  }
-
-  constructor({ encounterStart, lastServerTime, activity }: Struct<LogData>) {
-    this.encounterStart = encounterStart;
-    this.lastServerTime = lastServerTime;
-    this.activity = activity;
-  }
-
-  encounterDuration() {
-    return Date.diff(this.lastServerTime, this.encounterStart);
-  }
-
-  uptimeFor(name: string) {
-    return this.activity[name]?.uptime ?? 0;
-  }
-
-  updateTime(serverTime: Date) {
-    return new LogData(fset(this, { lastServerTime: serverTime }));
-  }
-
-  updateActivity(
-    sourceName: string,
-    f: (_: LogDataActivity) => LogDataActivity
-  ) {
-    const record = this.activity[sourceName] ?? {
-      castStart: null,
-      lastCredit: new Date(0),
-      uptime: 0,
-      revives: 0,
-    };
-
-    return new LogData(
-      fset(this, {
-        activity: fset(this.activity, { [sourceName]: f(record) }),
-      })
-    );
-  }
-}
-
 interface AppProps {}
 
 interface AppState {
@@ -752,7 +690,7 @@ class App extends React.Component<AppProps, AppState> {
 
     const applyUpdate = (
       sourceName?: string,
-      f?: (_: LogDataActivity) => LogDataActivity
+      f?: (_: Activity) => Activity
     ) => {
       this.setState({ serverTime, lastLogLine });
 
