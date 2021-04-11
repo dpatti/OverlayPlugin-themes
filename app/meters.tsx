@@ -74,6 +74,10 @@ interface Combatant {
   };
 }
 
+interface IndexedEncounter extends Encounter {
+  index: number | null;
+}
+
 enum View {
   Damage = "Damage",
   Healing = "Healing",
@@ -246,7 +250,7 @@ interface HeaderProps {
   encounter: Encounter;
   onSelectEncounter: (index: number | null) => void;
   currentView: View;
-  history: Array<Encounter>;
+  encounterOptions: Array<IndexedEncounter>;
   onSelectView: (_: View) => void;
 }
 
@@ -296,14 +300,6 @@ class Header extends React.Component<HeaderProps, HeaderState> {
 
   render() {
     const encounter = this.props.encounter;
-    const encounters = [
-      { label: "Current Encounter", id: null },
-      ...this.props.history.map((encounter, id) => ({
-        label: formatEncounter(encounter),
-        id,
-      })),
-    ];
-
     const self = _.find(encounter.combatants, ({ isSelf }) => isSelf) ?? null;
 
     const viewSummary = {
@@ -338,15 +334,17 @@ class Header extends React.Component<HeaderProps, HeaderState> {
             </span>
             {this.state.showEncounterSelector ? (
               <div className={`dropdown-menu encounters-list-dropdown`}>
-                {encounters.map(({ label, id }, i) => (
-                  <div
-                    key={i}
-                    className="dropdown-menu-item target-name"
-                    onClick={() => this.onSelectEncounter(id)}
-                  >
-                    {label}
-                  </div>
-                ))}
+                {this.props.encounterOptions.map(
+                  ({ index, ...encounter }, i) => (
+                    <div
+                      key={i}
+                      className="dropdown-menu-item target-name"
+                      onClick={() => this.onSelectEncounter(index)}
+                    >
+                      {formatEncounter(encounter)}
+                    </div>
+                  )
+                )}
               </div>
             ) : null}
             {self !== null ? (
@@ -479,7 +477,7 @@ class Combatants extends React.Component<CombatantsProps> {
 interface DamageMeterProps {
   data: Encounter;
   playerName: string | null;
-  history: Array<Encounter>;
+  encounterOptions: Array<IndexedEncounter>;
   onSelectEncounter: (index: number | null) => void;
 }
 
@@ -520,7 +518,7 @@ class DamageMeter extends React.Component<DamageMeterProps, DamageMeterState> {
       <div className="damage-meter">
         <Header
           encounter={encounter}
-          history={this.props.history}
+          encounterOptions={this.props.encounterOptions}
           onSelectView={(view) => this.handleViewChange(view)}
           onSelectEncounter={this.props.onSelectEncounter}
           currentView={this.state.currentView}
@@ -950,10 +948,17 @@ class App extends React.Component<AppProps, AppState> {
   }
 
   render() {
+    const index = (encounter: Encounter, index: number | null) =>
+      Object.assign({ index }, encounter);
+    const indexedHistory = this.state.history.map(index);
+    const encounterOptions = this.state.currentEncounter?.isActive
+      ? [index(this.state.currentEncounter, null)].concat(indexedHistory)
+      : indexedHistory;
+
     return this.state.currentEncounter ? (
       <DamageMeter
         data={this.state.selectedEncounter ?? this.state.currentEncounter}
-        history={this.state.history}
+        encounterOptions={encounterOptions}
         onSelectEncounter={(index) => this.onSelectEncounter(index)}
         playerName={this.state.playerName}
       />
