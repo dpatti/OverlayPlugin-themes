@@ -6,6 +6,7 @@ import {
   Percent,
   Span,
   addEventListener,
+  exhaustive,
   fset,
   noBubble,
   parseQuery,
@@ -34,9 +35,7 @@ interface Encounter {
   };
 
   combatants: Array<Combatant>;
-  // XXX: Does logData belong here? It does not round-trip serialization at all.
-  logData: LogData | null;
-  raw: ACT.DataUpdate;
+  source: Source;
 }
 
 interface Combatant {
@@ -75,6 +74,12 @@ interface Combatant {
   };
 }
 
+interface Source {
+  actData: ACT.DataUpdate;
+  logData: LogData | null;
+  playerName: string | null;
+}
+
 interface IndexedEncounter extends Encounter {
   index: number | null;
 }
@@ -108,6 +113,134 @@ const parsePercent = (s: string): number => {
     return parseFloat(s.slice(0, -1)) / 100;
   } else {
     return parseFloat(s);
+  }
+};
+
+const parseEncounter = (source: Source): Encounter => {
+  const { actData, logData, playerName } = source;
+
+  // This is different from the encounter's notion of duration because ACT
+  // may be configured to trim out periods of inactivity.
+  const duration =
+    logData?.encounterDuration() || parseInt(actData.Encounter.DURATION);
+
+  const combatants = _.map(actData.Combatant, (combatant) => {
+    const [name, isSelf] =
+      playerName !== null &&
+      (combatant.name === YOU || combatant.name === playerName)
+        ? [playerName, true]
+        : [combatant.name, false];
+
+    const uptime = logData?.uptimeFor(name) ?? 0;
+
+    return {
+      name,
+      job: combatant.Job.toLowerCase(),
+      isSelf,
+      stats: {
+        damage: {
+          total: parseInt(combatant.damage),
+          perSecond: parseRate(combatant.encdps),
+          relative: parsePercent(combatant["damage%"]),
+          max: combatant.maxhit,
+          crit: parsePercent(combatant["crithit%"]),
+          directHit: parsePercent(combatant.DirectHitPct),
+          critDirectHit: parsePercent(combatant.CritDirectHitPct),
+        },
+        healing: {
+          total: parseInt(combatant.healed),
+          perSecond: parseRate(combatant.enchps),
+          relative: parsePercent(combatant["healed%"]),
+          max: combatant.maxheal,
+          overheal: parsePercent(combatant["OverHealPct"]),
+          crit: parsePercent(combatant["critheal%"]),
+        },
+        tanking: {
+          total: parseInt(combatant.damagetaken),
+          parry: parsePercent(combatant.ParryPct),
+          block: parsePercent(combatant.BlockPct),
+        },
+        uptime: {
+          total: uptime,
+          relative: Math.min(1, uptime / duration),
+        },
+        deaths: parseInt(combatant.deaths),
+        revives: logData?.activity[name]?.revives ?? 0,
+      },
+    };
+  });
+
+  return {
+    title: actData.Encounter.title,
+    duration,
+    isActive: actData.isActive === "true",
+    stats: {
+      damage: {
+        total: parseInt(actData.Encounter.damage),
+        perSecond: parseRate(actData.Encounter.encdps),
+      },
+      healing: {
+        total: parseInt(actData.Encounter.healed),
+        perSecond: parseRate(actData.Encounter.enchps),
+      },
+      deaths: parseInt(actData.Encounter.deaths),
+      revives: _.sumBy(combatants, "stats.revives"),
+    },
+
+    combatants,
+    source,
+  };
+};
+
+const versions = {
+  v1: (playerName: string | null) => (entry: any): Source | null => {
+    if ("Encounter" in entry) {
+      const logData = entry.logData ?? null;
+      return {
+        actData: entry as ACT.DataUpdate,
+        logData,
+        playerName,
+      };
+    }
+
+    return null;
+  },
+  v2: (playerName: string | null) => (entry: any): Source | null => {
+    if ("raw" in entry && "logData" in entry) {
+      return {
+        actData: entry.raw,
+        logData: LogData.load(entry.logData),
+        playerName,
+      };
+    }
+
+    return null;
+  },
+  v3: (entry: any): Source | null => {
+    if ("actData" in entry && "logData" in entry && "playerName" in entry) {
+      return {
+        actData: entry.actData,
+        logData: LogData.load(entry.logData),
+        playerName: entry.playerName,
+      };
+    }
+
+    return null;
+  },
+};
+
+const reconstruct = (data: object, playerName: string): Encounter => {
+  const { v1, v2, v3, ...etc } = versions;
+  exhaustive(etc);
+  const result = [v1(playerName), v2(playerName), v3].reduce(
+    (found, upgrade) => (found !== null ? found : upgrade(data)),
+    null as Source | null
+  );
+
+  if (result === null) {
+    throw Error("Can't upgrade history object");
+  } else {
+    return parseEncounter(result);
   }
 };
 
@@ -612,7 +745,9 @@ class App extends React.Component<AppProps, AppState> {
       }
 
       if (history) {
-        history = _.map(history, (e) => this.upgrade(e));
+        history = _.map(history, (data) =>
+          reconstruct(data, this.state.playerName ?? YOU)
+        );
         this.setState({ currentEncounter: history[0], history: history });
       }
     });
@@ -638,7 +773,10 @@ class App extends React.Component<AppProps, AppState> {
     const duration = (enc?: ACT.DataUpdate | null) => enc?.Encounter.DURATION;
 
     // Encounter started
-    if (!isActive(this.state.currentEncounter?.raw) && isActive(update)) {
+    if (
+      !isActive(this.state.currentEncounter?.source.actData) &&
+      isActive(update)
+    ) {
       // XXX: lastLogLine / serverTime as null
       if (this.state.lastLogLine !== null && this.state.serverTime !== null) {
         const updateLag = performance.now() - this.state.lastLogLine;
@@ -657,18 +795,26 @@ class App extends React.Component<AppProps, AppState> {
     // idea is that if we get data updates after the encounter is over, the last
     // log data we applied is the most semantically correct one.
     const logData =
-      duration(this.state.currentEncounter?.raw) === duration(update) &&
-      this.state.currentEncounter?.logData != null
-        ? this.state.currentEncounter.logData
+      duration(this.state.currentEncounter?.source.actData) ===
+        duration(update) && this.state.currentEncounter?.source.logData != null
+        ? this.state.currentEncounter.source.logData
         : this.state.rollingLogData;
 
-    const encounter = this.parse(update, logData);
+    const encounter = parseEncounter({
+      actData: update,
+      logData,
+      playerName: this.state.playerName,
+    });
 
     // Encounter ended
-    if (isActive(this.state.currentEncounter?.raw) && !isActive(update)) {
+    if (
+      isActive(this.state.currentEncounter?.source.actData) &&
+      !isActive(update)
+    ) {
       history = [encounter].concat(history).slice(0, 10);
 
-      localStorage.setItem(App.HISTORY_KEY, JSON.stringify(history));
+      const raw = _.map(history, "source");
+      localStorage.setItem(App.HISTORY_KEY, JSON.stringify(raw));
     }
 
     this.setState({ currentEncounter: encounter, history });
@@ -767,121 +913,6 @@ class App extends React.Component<AppProps, AppState> {
       this.setState({
         selectedEncounter: null,
       });
-    }
-  }
-
-  parse(data: ACT.DataUpdate, logData: LogData | null): Encounter {
-    const { playerName } = this.state;
-
-    // This is different from the encounter's notion of duration because ACT
-    // may be configured to trim out periods of inactivity.
-    const duration =
-      logData?.encounterDuration() || parseInt(data.Encounter.DURATION);
-
-    const combatants = _.map(data.Combatant, (combatant) => {
-      const [name, isSelf] =
-        playerName !== null &&
-        (combatant.name === YOU || combatant.name === playerName)
-          ? [playerName, true]
-          : [combatant.name, false];
-
-      const uptime = logData?.uptimeFor(name) ?? 0;
-
-      return {
-        name,
-        job: combatant.Job.toLowerCase(),
-        isSelf,
-        stats: {
-          damage: {
-            total: parseInt(combatant.damage),
-            perSecond: parseRate(combatant.encdps),
-            relative: parsePercent(combatant["damage%"]),
-            max: combatant.maxhit,
-            crit: parsePercent(combatant["crithit%"]),
-            directHit: parsePercent(combatant.DirectHitPct),
-            critDirectHit: parsePercent(combatant.CritDirectHitPct),
-          },
-          healing: {
-            total: parseInt(combatant.healed),
-            perSecond: parseRate(combatant.enchps),
-            relative: parsePercent(combatant["healed%"]),
-            max: combatant.maxheal,
-            overheal: parsePercent(combatant["OverHealPct"]),
-            crit: parsePercent(combatant["critheal%"]),
-          },
-          tanking: {
-            total: parseInt(combatant.damagetaken),
-            parry: parsePercent(combatant.ParryPct),
-            block: parsePercent(combatant.BlockPct),
-          },
-          uptime: {
-            total: uptime,
-            relative: Math.min(1, uptime / duration),
-          },
-          deaths: parseInt(combatant.deaths),
-          revives: logData?.activity[name]?.revives ?? 0,
-        },
-      };
-    });
-
-    return {
-      title: data.Encounter.title,
-      duration,
-      isActive: data.isActive === "true",
-      stats: {
-        damage: {
-          total: parseInt(data.Encounter.damage),
-          perSecond: parseRate(data.Encounter.encdps),
-        },
-        healing: {
-          total: parseInt(data.Encounter.healed),
-          perSecond: parseRate(data.Encounter.enchps),
-        },
-        deaths: parseInt(data.Encounter.deaths),
-        revives: _.sumBy(combatants, "stats.revives"),
-      },
-
-      combatants,
-      logData,
-      raw: data,
-    };
-  }
-
-  upgrade(data: object): Encounter {
-    // XXX: Maybe do something more principled for versioning
-    if ("Encounter" in data) {
-      const update = data as any;
-
-      const logData =
-        update.logData != null
-          ? new LogData({
-              encounterStart: new Date(update.logData.encounterStart),
-              lastServerTime: new Date(update.logData.lastServerTime),
-              activity: _.mapValues(update.logData.activity, (activity) => ({
-                castStart:
-                  activity.castStart != null
-                    ? new Date(activity.castStart)
-                    : null,
-                lastCredit: new Date(activity.castStart),
-                uptime: activity.uptime,
-                revives: 0,
-              })),
-            })
-          : null;
-
-      const encounter = this.parse(update, logData);
-
-      return encounter;
-    } else if ("stats" in data) {
-      const d = data as Encounter;
-      d.stats.revives ??= 0;
-      d.combatants.forEach((combatant) => {
-        combatant.stats.revives ??= 0;
-      });
-
-      return d;
-    } else {
-      throw Error("Can't upgrade history object");
     }
   }
 

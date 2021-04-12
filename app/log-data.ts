@@ -1,4 +1,5 @@
-import { Struct, Span, fset } from "./util";
+import _ from "lodash";
+import { Serialized, Struct, Span, fset } from "./util";
 
 export interface Activity {
   readonly castStart: Date | null;
@@ -19,6 +20,20 @@ export class LogData {
       encounterStart,
       lastServerTime: encounterStart,
       activity: {},
+    });
+  }
+
+  static load(raw: Serialized<Struct<LogData>>): LogData {
+    return new this({
+      encounterStart: new Date(raw.encounterStart ?? 0),
+      lastServerTime: new Date(raw.lastServerTime ?? 0),
+      activity: _.mapValues(raw.activity, (activity) => ({
+        castStart:
+          activity?.castStart != null ? new Date(activity.castStart) : null,
+        lastCredit: new Date(activity?.lastCredit ?? 0),
+        uptime: activity?.uptime ?? 0,
+        revives: activity?.revives ?? 0,
+      })),
     });
   }
 

@@ -8,8 +8,23 @@ type NonMethodKeys<T> = ({
 export type Struct<T> = Pick<T, NonMethodKeys<T>>;
 export type Dict = { [key: string]: string };
 
+// XXX: I don't think there's a way to separate explicitly open objects (e.g.,
+// mapping from player name to value) from implicitly open structs, so we have
+// no choice but to make the open object keys optional, which doesn't make
+// sense.
+export type Serialized<T> = T extends Date
+  ? string
+  : T extends object
+  ? { [P in keyof T]?: Serialized<T[P]> }
+  : T extends Array<infer E>
+  ? Array<Serialized<E>>
+  : T;
+
 export type Percent = number;
 export type Span = number;
+
+type Empty<T> = {} extends T ? T : never;
+export const exhaustive = <T>(_: Empty<T>): void => {};
 
 // helper to functionally set a key in an object by returning a new copy
 export const fset = <A, B>(obj: A, extensions: B): A & B =>
