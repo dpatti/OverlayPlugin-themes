@@ -74,9 +74,9 @@ interface Combatant {
 }
 
 interface Source {
-  actData: ACT.DataUpdate;
-  logData: Option<LogData>;
   playerName: string;
+  logData: LogData;
+  actData: ACT.DataUpdate;
 }
 
 interface IndexedEncounter extends Encounter {
@@ -115,12 +115,12 @@ const parsePercent = (s: string): number => {
 };
 
 const parseEncounter = (source: Source): Encounter => {
-  const { actData, logData, playerName } = source;
+  const { playerName, logData, actData } = source;
 
   // This is different from the encounter's notion of duration because ACT
   // may be configured to trim out periods of inactivity.
   const duration =
-    logData?.encounterDuration() || parseInt(actData.Encounter.DURATION);
+    logData.encounterDuration() || parseInt(actData.Encounter.DURATION);
 
   const combatants = _.map(actData.Combatant, (combatant) => {
     const [name, isSelf] =
@@ -128,7 +128,7 @@ const parseEncounter = (source: Source): Encounter => {
         ? [playerName, true]
         : [combatant.name, false];
 
-    const uptime = logData?.uptimeFor(name) ?? 0;
+    const uptime = logData.activity[name]?.uptime ?? 0;
 
     return {
       name,
@@ -162,7 +162,7 @@ const parseEncounter = (source: Source): Encounter => {
           relative: Math.min(1, uptime / duration),
         },
         deaths: parseInt(combatant.deaths),
-        revives: logData?.activity[name]?.revives ?? 0,
+        revives: logData.activity[name]?.revives ?? 0,
       },
     };
   });
@@ -749,10 +749,10 @@ class App extends React.Component<AppProps, AppState> {
     // you aren't involved in. Drop those updates unless they include someone.
     if (_.isEmpty(update.Combatant)) return;
 
-    let { history } = this.state;
+    let { history, rollingLogData } = this.state;
 
-    const isActive = (enc?: Option<ACT.DataUpdate>) => enc?.isActive === "true";
-    const duration = (enc?: Option<ACT.DataUpdate>) => enc?.Encounter.DURATION;
+    const isActive = (enc?: ACT.DataUpdate) => enc?.isActive === "true";
+    const duration = (enc?: ACT.DataUpdate) => enc?.Encounter.DURATION;
 
     // Encounter started
     if (
@@ -762,15 +762,17 @@ class App extends React.Component<AppProps, AppState> {
       // XXX: lastLogLine / serverTime as null
       if (this.state.lastLogLine !== null && this.state.serverTime !== null) {
         const updateLag = performance.now() - this.state.lastLogLine;
-        // XXX: I didn't realize that this doesn't take place immediately
-        this.setState({
-          selectedEncounter: null,
-          rollingLogData: LogData.startNew({
-            encounterStart: this.state.serverTime.add(updateLag),
-          }),
+        rollingLogData = LogData.startNew({
+          encounterStart: this.state.serverTime.add(updateLag),
         });
+        this.setState({ selectedEncounter: null, rollingLogData });
       }
     }
+
+    // We expect this to never be true: when the first update comes in,
+    // rollingLogData is set, and it's only cleared after the last update comes
+    // in.
+    if (this.state.rollingLogData === null) return;
 
     // Only use our latest log data if the encounter's timer advanced. It's
     // possible that testing `isActive` is the right way to do this instead. The
@@ -778,7 +780,7 @@ class App extends React.Component<AppProps, AppState> {
     // log data we applied is the most semantically correct one.
     const logData =
       duration(this.state.currentEncounter?.source.actData) ===
-        duration(update) && this.state.currentEncounter?.source.logData != null
+        duration(update) && this.state.currentEncounter !== null
         ? this.state.currentEncounter.source.logData
         : this.state.rollingLogData;
 
@@ -797,6 +799,7 @@ class App extends React.Component<AppProps, AppState> {
 
       const raw = _.map(history, "source");
       localStorage.setItem(App.HISTORY_KEY, JSON.stringify(raw));
+      this.setState({ rollingLogData: null });
     }
 
     this.setState({ currentEncounter: encounter, history });
