@@ -730,7 +730,7 @@ class App extends React.Component<AppProps, AppState> {
 
       if (history) {
         history = _.map(history, (data) => reconstruct(data, storedPlayerName));
-        this.setState({ currentEncounter: history[0], history: history });
+        this.setState({ history });
       }
     });
   }
@@ -749,24 +749,18 @@ class App extends React.Component<AppProps, AppState> {
     // you aren't involved in. Drop those updates unless they include someone.
     if (_.isEmpty(update.Combatant)) return;
 
+    // Unlikely, but let log line tick if it hasn't already
+    if (this.state.lastLogLine === null) return;
+
     let { history, rollingLogData } = this.state;
 
-    const isActive = (enc?: ACT.DataUpdate) => enc?.isActive === "true";
-    const duration = (enc?: ACT.DataUpdate) => enc?.Encounter.DURATION;
-
     // Encounter started
-    if (
-      !isActive(this.state.currentEncounter?.source.actData) &&
-      isActive(update)
-    ) {
-      // XXX: lastLogLine / serverTime as null
-      if (this.state.lastLogLine !== null && this.state.serverTime !== null) {
-        const updateLag = performance.now() - this.state.lastLogLine;
-        rollingLogData = LogData.startNew({
-          encounterStart: this.state.serverTime.add(updateLag),
-        });
-        this.setState({ selectedEncounter: null, rollingLogData });
-      }
+    if (this.state.currentEncounter === null && ACT.isActive(update)) {
+      const updateLag = performance.now() - this.state.lastLogLine;
+      rollingLogData = LogData.startNew({
+        encounterStart: this.state.serverTime.add(updateLag),
+      });
+      this.setState({ selectedEncounter: null, rollingLogData });
     }
 
     // We expect this to never be true: when the first update comes in,
@@ -779,30 +773,28 @@ class App extends React.Component<AppProps, AppState> {
     // idea is that if we get data updates after the encounter is over, the last
     // log data we applied is the most semantically correct one.
     const logData =
-      duration(this.state.currentEncounter?.source.actData) ===
-        duration(update) && this.state.currentEncounter !== null
+      this.state.currentEncounter !== null &&
+      ACT.duration(this.state.currentEncounter.source.actData) ===
+        ACT.duration(update)
         ? this.state.currentEncounter.source.logData
         : this.state.rollingLogData;
 
     const encounter = parseEncounter({
-      actData: update,
-      logData,
       playerName: this.state.playerName,
+      logData,
+      actData: update,
     });
 
     // Encounter ended
-    if (
-      isActive(this.state.currentEncounter?.source.actData) &&
-      !isActive(update)
-    ) {
+    if (this.state.currentEncounter !== null && !ACT.isActive(update)) {
       history = [encounter].concat(history).slice(0, 10);
 
       const raw = _.map(history, "source");
       localStorage.setItem(App.HISTORY_KEY, JSON.stringify(raw));
-      this.setState({ rollingLogData: null });
+      this.setState({ currentEncounter: null, rollingLogData: null, history });
+    } else {
+      this.setState({ currentEncounter: encounter });
     }
-
-    this.setState({ currentEncounter: encounter, history });
   }
 
   setPlayerName(playerName: string) {
@@ -890,7 +882,7 @@ class App extends React.Component<AppProps, AppState> {
   }
 
   onSelectEncounter(index: Option<number>) {
-    if (index && index >= 0) {
+    if (index !== null && index >= 0) {
       this.setState({
         selectedEncounter: this.state.history[index],
       });
@@ -905,13 +897,23 @@ class App extends React.Component<AppProps, AppState> {
     const index = (encounter: Encounter, index: Option<number>) =>
       Object.assign({ index }, encounter);
     const indexedHistory = this.state.history.map(index);
-    const encounterOptions = this.state.currentEncounter?.isActive
-      ? [index(this.state.currentEncounter, null)].concat(indexedHistory)
-      : indexedHistory;
+    const encounterOptions =
+      this.state.currentEncounter !== null
+        ? [index(this.state.currentEncounter, null)].concat(indexedHistory)
+        : indexedHistory;
 
-    return this.state.currentEncounter ? (
+    // View in terms of priority
+    const encounterView = _.first(
+      _.compact([
+        this.state.selectedEncounter,
+        this.state.currentEncounter,
+        this.state.history[0],
+      ])
+    );
+
+    return encounterView != null ? (
       <DamageMeter
-        data={this.state.selectedEncounter ?? this.state.currentEncounter}
+        data={encounterView}
         encounterOptions={encounterOptions}
         onSelectEncounter={(index) => this.onSelectEncounter(index)}
       />

@@ -43,3 +43,6 @@ export interface DataUpdate {
 }
 
 export const YOU = "YOU";
+
+export const isActive = (update: DataUpdate) => update.isActive === "true";
+export const duration = (update: DataUpdate) => update.Encounter.DURATION;
