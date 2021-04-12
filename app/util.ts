@@ -13,12 +13,12 @@ export type Option<T> = T | null;
 // mapping from player name to value) from implicitly open structs, so we have
 // no choice but to make the open object keys optional, which doesn't make
 // sense.
-export type Serialized<T> = T extends Date
+export type SerializedUnstable<T> = T extends Date
   ? string
   : T extends object
-  ? { [P in keyof T]?: Serialized<T[P]> }
+  ? { [P in keyof T]?: SerializedUnstable<T[P]> }
   : T extends Array<infer E>
-  ? Array<Serialized<E>>
+  ? Array<SerializedUnstable<E>>
   : T;
 
 export type Percent = number;

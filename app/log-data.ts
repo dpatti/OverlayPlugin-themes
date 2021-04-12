@@ -1,5 +1,5 @@
 import _ from "lodash";
-import { Option, Serialized, Struct, Span, fset } from "./util";
+import { Option, SerializedUnstable, Span, fset } from "./util";
 
 export interface Activity {
   readonly castStart: Option<Date>;
@@ -8,23 +8,25 @@ export interface Activity {
   readonly revives: number;
 }
 
-export class LogData {
+export interface LogData {
   readonly encounterStart: Date;
   readonly lastServerTime: Date;
   readonly activity: {
     readonly [name: string]: Activity;
   };
+}
 
-  static startNew({ encounterStart }: { encounterStart: Date }) {
-    return new this({
+export const LogData = {
+  startNew({ encounterStart }: { encounterStart: Date }): LogData {
+    return {
       encounterStart,
       lastServerTime: encounterStart,
       activity: {},
-    });
-  }
+    };
+  },
 
-  static load(raw: Serialized<Struct<LogData>>): LogData {
-    return new this({
+  load(raw: SerializedUnstable<LogData>): LogData {
+    return {
       encounterStart: new Date(raw.encounterStart ?? 0),
       lastServerTime: new Date(raw.lastServerTime ?? 0),
       activity: _.mapValues(raw.activity, (activity) => ({
@@ -34,39 +36,31 @@ export class LogData {
         uptime: activity?.uptime ?? 0,
         revives: activity?.revives ?? 0,
       })),
-    });
-  }
+    };
+  },
 
-  constructor({ encounterStart, lastServerTime, activity }: Struct<LogData>) {
-    this.encounterStart = encounterStart;
-    this.lastServerTime = lastServerTime;
-    this.activity = activity;
-  }
+  encounterDuration(t: LogData) {
+    return Date.diff(t.lastServerTime, t.encounterStart);
+  },
 
-  encounterDuration() {
-    return Date.diff(this.lastServerTime, this.encounterStart);
-  }
+  updateTime(t: LogData, serverTime: Date): LogData {
+    return fset(t, { lastServerTime: serverTime });
+  },
 
-  uptimeFor(name: string) {
-    return this.activity[name]?.uptime ?? 0;
-  }
-
-  updateTime(serverTime: Date) {
-    return new LogData(fset(this, { lastServerTime: serverTime }));
-  }
-
-  updateActivity(sourceName: string, f: (_: Activity) => Activity) {
-    const record = this.activity[sourceName] ?? {
+  updateActivity(
+    t: LogData,
+    sourceName: string,
+    f: (_: Activity) => Activity
+  ): LogData {
+    const record = t.activity[sourceName] ?? {
       castStart: null,
       lastCredit: new Date(0),
       uptime: 0,
       revives: 0,
     };
 
-    return new LogData(
-      fset(this, {
-        activity: fset(this.activity, { [sourceName]: f(record) }),
-      })
-    );
-  }
-}
+    return fset(t, {
+      activity: fset(t.activity, { [sourceName]: f(record) }),
+    });
+  },
+};

@@ -120,7 +120,7 @@ const parseEncounter = (source: Source): Encounter => {
   // This is different from the encounter's notion of duration because ACT
   // may be configured to trim out periods of inactivity.
   const duration =
-    logData.encounterDuration() || parseInt(actData.Encounter.DURATION);
+    LogData.encounterDuration(logData) || parseInt(actData.Encounter.DURATION);
 
   const combatants = _.map(actData.Combatant, (combatant) => {
     const [name, isSelf] =
@@ -811,17 +811,13 @@ class App extends React.Component<AppProps, AppState> {
     const serverTime = Date.max(this.state.serverTime, new Date(timestamp));
     const lastLogLine = performance.now();
 
-    const applyUpdate = (
-      sourceName?: string,
-      f?: (_: Activity) => Activity
-    ) => {
+    const applyUpdate = (sourceName: string, f: (_: Activity) => Activity) => {
       this.setState({ serverTime, lastLogLine });
 
       if (this.state.rollingLogData !== null) {
-        let rollingLogData = this.state.rollingLogData.updateTime(serverTime);
-        if (sourceName !== undefined && f !== undefined) {
-          rollingLogData = rollingLogData.updateActivity(sourceName, f);
-        }
+        let rollingLogData = this.state.rollingLogData;
+        rollingLogData = LogData.updateTime(rollingLogData, serverTime);
+        rollingLogData = LogData.updateActivity(rollingLogData, sourceName, f);
         this.setState({ rollingLogData });
       }
     };
@@ -877,7 +873,9 @@ class App extends React.Component<AppProps, AppState> {
         };
       });
     } else if (serverTime > this.state.serverTime) {
-      applyUpdate();
+      // We could potentially update rollingLogData too, but it's less useful
+      // because combat log line updates should be sufficient.
+      this.setState({ serverTime, lastLogLine });
     }
   }
 
