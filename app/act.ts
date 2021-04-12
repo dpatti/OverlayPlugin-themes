@@ -12,6 +12,7 @@ export interface DataUpdate {
     encdps: string;
     healed: string;
     enchps: string;
+    damagetaken: string;
     deaths: string;
     maxhit: string;
     maxheal: string;

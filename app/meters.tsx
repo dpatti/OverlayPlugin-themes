@@ -29,6 +29,9 @@ interface Encounter {
       total: number;
       perSecond: number;
     };
+    tanking: {
+      total: number;
+    };
     deaths: number;
     revives: number;
   };
@@ -61,8 +64,7 @@ interface Combatant {
     };
     tanking: {
       total: number;
-      parry: Percent;
-      block: Percent;
+      relative: Percent;
     };
     uptime: {
       total: Span;
@@ -154,6 +156,9 @@ const parseEncounter = (source: Source): Encounter => {
         },
         tanking: {
           total: parseInt(combatant.damagetaken),
+          relative:
+            parseInt(combatant.damagetaken) /
+            parseInt(actData.Encounter.damagetaken),
           parry: parsePercent(combatant.ParryPct),
           block: parsePercent(combatant.BlockPct),
         },
@@ -179,6 +184,9 @@ const parseEncounter = (source: Source): Encounter => {
       healing: {
         total: parseInt(actData.Encounter.healed),
         perSecond: parseRate(actData.Encounter.enchps),
+      },
+      tanking: {
+        total: parseInt(actData.Encounter.damagetaken),
       },
       deaths: parseInt(actData.Encounter.deaths),
       revives: _.sumBy(combatants, "stats.revives"),
@@ -549,10 +557,7 @@ class Combatants extends React.Component<CombatantsProps> {
             [View.Tanking]: {
               format: formatNumber,
               total: combatant.stats.tanking.total,
-              extra: [
-                `${formatPercent(combatant.stats.tanking.parry)} parry`,
-                `${formatPercent(combatant.stats.tanking.block)} block`,
-              ],
+              extra: [formatPercent(combatant.stats.tanking.relative)],
             },
             [View.Uptime]: {
               format: formatSpan,
