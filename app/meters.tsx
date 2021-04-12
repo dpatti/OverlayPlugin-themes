@@ -3,6 +3,7 @@ import React from "react";
 import * as ACT from "./act";
 import { LogData, Activity } from "./log-data";
 import {
+  Option,
   Percent,
   Span,
   addEventListener,
@@ -76,12 +77,12 @@ interface Combatant {
 
 interface Source {
   actData: ACT.DataUpdate;
-  logData: LogData | null;
-  playerName: string | null;
+  logData: Option<LogData>;
+  playerName: Option<string>;
 }
 
 interface IndexedEncounter extends Encounter {
-  index: number | null;
+  index: Option<number>;
 }
 
 enum View {
@@ -193,7 +194,7 @@ const parseEncounter = (source: Source): Encounter => {
 };
 
 const versions = {
-  v1: (playerName: string | null) => (entry: any): Source | null => {
+  v1: (playerName: Option<string>) => (entry: any): Option<Source> => {
     if ("Encounter" in entry) {
       const logData = entry.logData ?? null;
       return {
@@ -205,7 +206,7 @@ const versions = {
 
     return null;
   },
-  v2: (playerName: string | null) => (entry: any): Source | null => {
+  v2: (playerName: Option<string>) => (entry: any): Option<Source> => {
     if ("raw" in entry && "logData" in entry) {
       return {
         actData: entry.raw,
@@ -216,7 +217,7 @@ const versions = {
 
     return null;
   },
-  v3: (entry: any): Source | null => {
+  v3: (entry: any): Option<Source> => {
     if ("actData" in entry && "logData" in entry && "playerName" in entry) {
       return {
         actData: entry.actData,
@@ -234,7 +235,7 @@ const reconstruct = (data: object, playerName: string): Encounter => {
   exhaustive(etc);
   const result = [v1(playerName), v2(playerName), v3].reduce(
     (found, upgrade) => (found !== null ? found : upgrade(data)),
-    null as Source | null
+    null as Option<Source>
   );
 
   if (result === null) {
@@ -378,7 +379,7 @@ class Stats extends React.Component<StatsProps, {}> {
 
 interface HeaderProps {
   encounter: Encounter;
-  onSelectEncounter: (index: number | null) => void;
+  onSelectEncounter: (index: Option<number>) => void;
   currentView: View;
   encounterOptions: Array<IndexedEncounter>;
   onSelectView: (_: View) => void;
@@ -411,7 +412,7 @@ class Header extends React.Component<HeaderProps, HeaderState> {
     });
   }
 
-  onSelectEncounter(index: number | null) {
+  onSelectEncounter(index: Option<number>) {
     this.toggleEncounterSelector(false);
     this.props.onSelectEncounter(index);
   }
@@ -606,9 +607,9 @@ class Combatants extends React.Component<CombatantsProps> {
 
 interface DamageMeterProps {
   data: Encounter;
-  playerName: string | null;
+  playerName: Option<string>;
   encounterOptions: Array<IndexedEncounter>;
-  onSelectEncounter: (index: number | null) => void;
+  onSelectEncounter: (index: Option<number>) => void;
 }
 
 interface DamageMeterState {
@@ -688,13 +689,13 @@ class Debugger extends React.PureComponent<DebuggerProps> {
 interface AppProps {}
 
 interface AppState {
-  playerName: string | null;
-  currentEncounter: Encounter | null;
+  playerName: Option<string>;
+  currentEncounter: Option<Encounter>;
   history: Array<Encounter>;
-  selectedEncounter: Encounter | null;
-  rollingLogData: LogData | null;
+  selectedEncounter: Option<Encounter>;
+  rollingLogData: Option<LogData>;
   serverTime: Date;
-  lastLogLine: number | null;
+  lastLogLine: Option<number>;
 }
 
 class App extends React.Component<AppProps, AppState> {
@@ -769,8 +770,8 @@ class App extends React.Component<AppProps, AppState> {
 
     let { history } = this.state;
 
-    const isActive = (enc?: ACT.DataUpdate | null) => enc?.isActive === "true";
-    const duration = (enc?: ACT.DataUpdate | null) => enc?.Encounter.DURATION;
+    const isActive = (enc?: Option<ACT.DataUpdate>) => enc?.isActive === "true";
+    const duration = (enc?: Option<ACT.DataUpdate>) => enc?.Encounter.DURATION;
 
     // Encounter started
     if (
@@ -820,7 +821,7 @@ class App extends React.Component<AppProps, AppState> {
     this.setState({ currentEncounter: encounter, history });
   }
 
-  setPlayerName(playerName: string | null) {
+  setPlayerName(playerName: Option<string>) {
     if (playerName && playerName !== this.state.playerName) {
       localStorage.setItem(App.PLAYER_NAME_KEY, playerName);
       this.setState({ playerName });
@@ -904,7 +905,7 @@ class App extends React.Component<AppProps, AppState> {
     }
   }
 
-  onSelectEncounter(index: number | null) {
+  onSelectEncounter(index: Option<number>) {
     if (index && index >= 0) {
       this.setState({
         selectedEncounter: this.state.history[index],
@@ -917,7 +918,7 @@ class App extends React.Component<AppProps, AppState> {
   }
 
   render() {
-    const index = (encounter: Encounter, index: number | null) =>
+    const index = (encounter: Encounter, index: Option<number>) =>
       Object.assign({ index }, encounter);
     const indexedHistory = this.state.history.map(index);
     const encounterOptions = this.state.currentEncounter?.isActive

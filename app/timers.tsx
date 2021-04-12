@@ -1,7 +1,7 @@
 import _ from "lodash";
 import React from "react";
 import * as ACT from "./act";
-import { Percent, Span, addEventListener, parseQuery } from "./util";
+import { Option, Percent, Span, addEventListener, parseQuery } from "./util";
 
 enum Scope {
   Friendly,
@@ -157,7 +157,7 @@ const DATA = _.pickBy(
 
 class ActionIcon {
   static readonly _cache: { [actionID: number]: string } = {};
-  static _currentRequest: number | null = null;
+  static _currentRequest: Option<number> = null;
   static _lastRequest = performance.now();
 
   static readonly API_ROOT = "https://xivapi.com";
@@ -237,7 +237,7 @@ interface TimerProps {
   dismiss: () => void;
   action: string;
   source: string;
-  subText: string | null;
+  subText: Option<string>;
 }
 
 class Timer extends React.Component<TimerProps> {
@@ -355,7 +355,7 @@ interface AppProps {}
 
 interface AppState {
   serverTime: Date;
-  lastClockUpdate: number | null;
+  lastClockUpdate: Option<number>;
   tracking: Map<TimerKey, Map<number, Event>>;
 }
 

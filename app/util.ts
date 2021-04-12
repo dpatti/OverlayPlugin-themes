@@ -7,6 +7,7 @@ type NonMethodKeys<T> = ({
 
 export type Struct<T> = Pick<T, NonMethodKeys<T>>;
 export type Dict = { [key: string]: string };
+export type Option<T> = T | null;
 
 // XXX: I don't think there's a way to separate explicitly open objects (e.g.,
 // mapping from player name to value) from implicitly open structs, so we have
@@ -79,8 +80,8 @@ Date.prototype.add = function (t: Span): Date {
 
 declare global {
   interface Map<K, V> {
-    update(key: K, f: (_: V | null) => V | null): Map<K, V>;
-    filter(f: (_: V | null) => boolean): Map<K, V>;
+    update(key: K, f: (_: Option<V>) => Option<V>): Map<K, V>;
+    filter(f: (_: Option<V>) => boolean): Map<K, V>;
   }
 }
 

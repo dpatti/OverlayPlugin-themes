@@ -1,8 +1,8 @@
 import _ from "lodash";
-import { Serialized, Struct, Span, fset } from "./util";
+import { Option, Serialized, Struct, Span, fset } from "./util";
 
 export interface Activity {
-  readonly castStart: Date | null;
+  readonly castStart: Option<Date>;
   readonly lastCredit: Date;
   readonly uptime: Span;
   readonly revives: number;
