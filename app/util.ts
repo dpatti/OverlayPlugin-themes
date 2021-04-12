@@ -24,9 +24,6 @@ export type Serialized<T> = T extends Date
 export type Percent = number;
 export type Span = number;
 
-type Empty<T> = {} extends T ? T : never;
-export const exhaustive = <T>(_: Empty<T>): void => {};
-
 // helper to functionally set a key in an object by returning a new copy
 export const fset = <A, B>(obj: A, extensions: B): A & B =>
   _.defaults(extensions, obj);

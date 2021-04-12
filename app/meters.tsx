@@ -7,7 +7,6 @@ import {
   Percent,
   Span,
   addEventListener,
-  exhaustive,
   fset,
   noBubble,
   parseQuery,
@@ -16,7 +15,6 @@ import {
 const GCD = 2500;
 
 const LIMIT_BREAK = "Limit Break";
-const YOU = "YOU";
 
 interface Encounter {
   title: string;
@@ -78,7 +76,7 @@ interface Combatant {
 interface Source {
   actData: ACT.DataUpdate;
   logData: Option<LogData>;
-  playerName: Option<string>;
+  playerName: string;
 }
 
 interface IndexedEncounter extends Encounter {
@@ -95,7 +93,6 @@ enum View {
 }
 
 const options = parseQuery((options) => ({
-  you: options.you?.replace(/_/g, " ") || YOU,
   debug: "debug" in options || false,
 }));
 
@@ -127,8 +124,7 @@ const parseEncounter = (source: Source): Encounter => {
 
   const combatants = _.map(actData.Combatant, (combatant) => {
     const [name, isSelf] =
-      playerName !== null &&
-      (combatant.name === YOU || combatant.name === playerName)
+      combatant.name === ACT.YOU || combatant.name === playerName
         ? [playerName, true]
         : [combatant.name, false];
 
@@ -193,8 +189,8 @@ const parseEncounter = (source: Source): Encounter => {
   };
 };
 
-const versions = {
-  v1: (playerName: Option<string>) => (entry: any): Option<Source> => {
+const versions = (playerName: string) => [
+  (entry: any): Option<Source> => {
     if ("Encounter" in entry) {
       const logData = entry.logData ?? null;
       return {
@@ -206,7 +202,7 @@ const versions = {
 
     return null;
   },
-  v2: (playerName: Option<string>) => (entry: any): Option<Source> => {
+  (entry: any): Option<Source> => {
     if ("raw" in entry && "logData" in entry) {
       return {
         actData: entry.raw,
@@ -217,7 +213,7 @@ const versions = {
 
     return null;
   },
-  v3: (entry: any): Option<Source> => {
+  (entry: any): Option<Source> => {
     if ("actData" in entry && "logData" in entry && "playerName" in entry) {
       return {
         actData: entry.actData,
@@ -228,12 +224,10 @@ const versions = {
 
     return null;
   },
-};
+];
 
 const reconstruct = (data: object, playerName: string): Encounter => {
-  const { v1, v2, v3, ...etc } = versions;
-  exhaustive(etc);
-  const result = [v1(playerName), v2(playerName), v3].reduce(
+  const result = versions(playerName).reduce(
     (found, upgrade) => (found !== null ? found : upgrade(data)),
     null as Option<Source>
   );
@@ -242,14 +236,6 @@ const reconstruct = (data: object, playerName: string): Encounter => {
     throw Error("Can't upgrade history object");
   } else {
     return parseEncounter(result);
-  }
-};
-
-const formatName = (name: string) => {
-  if (name == YOU) {
-    return options.you;
-  } else {
-    return name;
   }
 };
 
@@ -311,9 +297,7 @@ class CombatantCompact extends React.PureComponent<CombatantCompactProps> {
           <div className="info">
             <span className="icon job-icon"></span>
             <span className="rank">{this.props.rank}.</span>
-            <span className="character-name">
-              {formatName(this.props.characterName)}
-            </span>
+            <span className="character-name">{this.props.characterName}</span>
             <span className="character-job">{this.props.job}</span>
           </div>
         </div>
@@ -607,7 +591,6 @@ class Combatants extends React.Component<CombatantsProps> {
 
 interface DamageMeterProps {
   data: Encounter;
-  playerName: Option<string>;
   encounterOptions: Array<IndexedEncounter>;
   onSelectEncounter: (index: Option<number>) => void;
 }
@@ -689,7 +672,7 @@ class Debugger extends React.PureComponent<DebuggerProps> {
 interface AppProps {}
 
 interface AppState {
-  playerName: Option<string>;
+  playerName: string;
   currentEncounter: Option<Encounter>;
   history: Array<Encounter>;
   selectedEncounter: Option<Encounter>;
@@ -705,7 +688,7 @@ class App extends React.Component<AppProps, AppState> {
   constructor(props: AppProps) {
     super(props);
     this.state = {
-      playerName: null,
+      playerName: ACT.YOU,
       currentEncounter: null,
       history: [],
       selectedEncounter: null,
@@ -729,11 +712,11 @@ class App extends React.Component<AppProps, AppState> {
       if (value) f(value);
     };
 
+    let storedPlayerName = this.state.playerName;
+
     withLoad(App.PLAYER_NAME_KEY, (playerName) => {
+      storedPlayerName = playerName;
       this.setState({ playerName });
-      // XXX: This is quite a hack, but `this.upgrade` depends on the
-      // playerName, which we enqueue as a state update here, synchronously.
-      Object.assign(this.state, { playerName });
     });
 
     withLoad(App.HISTORY_KEY, (payload) => {
@@ -746,9 +729,7 @@ class App extends React.Component<AppProps, AppState> {
       }
 
       if (history) {
-        history = _.map(history, (data) =>
-          reconstruct(data, this.state.playerName ?? YOU)
-        );
+        history = _.map(history, (data) => reconstruct(data, storedPlayerName));
         this.setState({ currentEncounter: history[0], history: history });
       }
     });
@@ -821,8 +802,8 @@ class App extends React.Component<AppProps, AppState> {
     this.setState({ currentEncounter: encounter, history });
   }
 
-  setPlayerName(playerName: Option<string>) {
-    if (playerName && playerName !== this.state.playerName) {
+  setPlayerName(playerName: string) {
+    if (playerName !== this.state.playerName) {
       localStorage.setItem(App.PLAYER_NAME_KEY, playerName);
       this.setState({ playerName });
     }
@@ -930,7 +911,6 @@ class App extends React.Component<AppProps, AppState> {
         data={this.state.selectedEncounter ?? this.state.currentEncounter}
         encounterOptions={encounterOptions}
         onSelectEncounter={(index) => this.onSelectEncounter(index)}
-        playerName={this.state.playerName}
       />
     ) : (
       <h3>Awaiting data.</h3>

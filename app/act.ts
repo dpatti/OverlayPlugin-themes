@@ -41,3 +41,5 @@ export interface DataUpdate {
   };
   isActive: "true" | "false";
 }
+
+export const YOU = "YOU";
