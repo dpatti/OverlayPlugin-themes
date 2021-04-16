@@ -124,13 +124,19 @@ const parseEncounter = (source: Source): Encounter => {
   const duration =
     LogData.encounterDuration(logData) || parseInt(actData.Encounter.DURATION);
 
-  const combatants = _.map(actData.Combatant, (combatant) => {
+  const combatants = _.flatMap(actData.Combatant, (combatant) => {
     const [name, isSelf] =
       combatant.name === ACT.YOU || combatant.name === playerName
         ? [playerName, true]
         : [combatant.name, false];
 
     const uptime = logData.activity[name]?.uptime ?? 0;
+
+    // This gets rid of NPCs, but it also somewhat unfortunately gets rid of
+    // pets. Pet names show up as "Pet (Owner)", so it would be possible to try
+    // and parse the name and match against the owner. I'm not sure it's worth
+    // it.
+    if (combatant.Job === "") return [];
 
     return {
       name,
@@ -531,8 +537,7 @@ class Combatants extends React.Component<CombatantsProps> {
         const stats = _.merge(
           {
             actor,
-            // XXX: is job nullable?
-            job: combatant.job || "",
+            job: combatant.job,
             characterName: combatant.name,
             isSelf: combatant.isSelf,
           },
