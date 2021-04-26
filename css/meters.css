@@ -320,15 +320,36 @@ li:last-child {
 }
 
 /* Timers */
-.timers .row { cursor: pointer }
 .timers .row.active { }
-.timers .row.cooldown {
+.timers .row.cooldown, .timers .row.ready {
   opacity: 0.5;
 }
 .timers .bar.fast {
   transition: width .05s linear;
 }
 .timers .subtext {
-    margin-left: 4px;
-    opacity: 0.6;
+  margin-left: 4px;
+  opacity: 0.6;
+}
+.timers .text-overlay {
+  right: 0px;
+}
+.timers .stats {
+  display: inline-block;
+  float: right;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+.timers .row .close {
+  cursor: pointer;
+  display: inline-block;
+  float: right;
+  height: 100%;
+  background-color: #ca5e4e;
+  text-align: center;
+  transition: width .1s ease-out;
+  width: 0;
+}
+.timers .row:hover .close {
+  width: 2em;
 }

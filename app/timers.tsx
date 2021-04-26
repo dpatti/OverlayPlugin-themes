@@ -44,7 +44,7 @@ const DATA0: { [actionID: number]: Entry } = {
     scope: Scope.Enemy,
     targeting: Target.Single,
     job: "blm",
-    sets: ["debug"],
+    sets: ["test"],
   },
 
   // DAMAGE ================================================================
@@ -112,7 +112,7 @@ const DATA0: { [actionID: number]: Entry } = {
     scope: Scope.Enemy,
     targeting: Target.Single,
     job: "blm",
-    sets: ["mitigation", "debug"],
+    sets: ["mitigation", "test"],
   },
   [0x3e8c]: {
     // Shield Samba
@@ -250,12 +250,12 @@ class Timer extends React.Component<TimerProps> {
       : {};
 
     return (
-      <li
-        className={`row ${this.props.state} ${this.props.job}`}
-        onClick={() => this.props.dismiss()}
-      >
+      <li className={`row ${this.props.state} ${this.props.job}`}>
         <div className="bar fast" style={{ width: width }} />
         <div className="text-overlay">
+          <div className="close" onClick={() => this.props.dismiss()}>
+            &times;
+          </div>
           <div className="stats">
             {seconds > 0 ? <span className="total">{seconds}s</span> : null}
           </div>
@@ -291,7 +291,7 @@ class Timers extends React.Component<TimersProps, TimersState> {
     const timers = Array.from(this.props.tracking).flatMap(([key, targets]) => {
       const { duration, cooldown, targeting, job } = DATA[key.actionID];
 
-      const event = _.maxBy(Array.from(targets.values()), "castAt") as Event;
+      const event = _.maxBy(Array.from(targets.values()), "castAt");
       if (event === undefined) return [];
 
       const elapsed =
@@ -303,10 +303,14 @@ class Timers extends React.Component<TimersProps, TimersState> {
         state = State.Active;
         timer = Math.max(0, duration - elapsed);
         percentage = timer / duration;
-      } else {
+      } else if (elapsed < cooldown * 2) {
         state = State.Cooldown;
         timer = Math.max(0, cooldown - elapsed);
         percentage = elapsed / cooldown;
+      } else {
+        // Arbitrarily hide cooldowns if they've been off for an entire cooldown
+        // cycle.
+        return [];
       }
 
       const subText =
@@ -330,15 +334,16 @@ class Timers extends React.Component<TimersProps, TimersState> {
       };
     });
 
-    type Timer = typeof timers extends Array<infer T> ? T : never;
+    type Timer = typeof timers[number];
 
     const ranking = [
       ({ state }: Timer) => (state === State.Active ? 0 : 1),
       ({ timer }: Timer) => timer,
+      ({ key }: Timer) => key.actionID,
     ];
 
     return (
-      <div className="timers">
+      <ul className="timers">
         {_.sortBy(timers, ...ranking).map(({ key, ...timer }) => (
           <Timer
             key={key.toString()}
@@ -346,7 +351,7 @@ class Timers extends React.Component<TimersProps, TimersState> {
             {...timer}
           />
         ))}
-      </div>
+      </ul>
     );
   }
 }
