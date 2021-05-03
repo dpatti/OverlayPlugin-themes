@@ -284,8 +284,7 @@ class Timers extends React.Component<TimersProps, TimersState> {
       const event = _.maxBy(Array.from(targets.values()), "castAt");
       if (event === undefined) return [];
 
-      const elapsed =
-        (this.props.serverTime.getTime() - event.castAt.getTime()) / 1000;
+      const elapsed = Date.diff(this.props.serverTime, event.castAt) / 1000;
 
       let state, timer, percentage;
 
@@ -397,9 +396,7 @@ class App extends React.Component<AppProps, AppState> {
     setInterval(() => {
       if (this.state.lastClockUpdate) {
         const offset = performance.now() - this.state.lastClockUpdate;
-        const simulatedTime = new Date(
-          this.state.serverTime.getTime() + offset
-        );
+        const simulatedTime = this.state.serverTime.add(offset);
         this.advanceTime(simulatedTime);
       }
     }, App.TIME_RESOLUTION);
@@ -407,7 +404,7 @@ class App extends React.Component<AppProps, AppState> {
 
   advanceTime(now: Date) {
     // We only set a new now if it advances our clock enough
-    if (now.getTime() - this.state.serverTime.getTime() > App.TIME_RESOLUTION) {
+    if (Date.diff(now, this.state.serverTime) > App.TIME_RESOLUTION) {
       this.setState({ serverTime: now, lastClockUpdate: performance.now() });
     }
   }
@@ -444,8 +441,7 @@ class App extends React.Component<AppProps, AppState> {
           // Since this is a new cast, we can evict anything that has been
           // around longer than the cooldown
           .filter(
-            ({ castAt }) =>
-              serverTime.getTime() - castAt.getTime() < cooldown * 1000
+            ({ castAt }) => Date.diff(serverTime, castAt) < cooldown * 1000
           )
           .update(targetID, (_) => payload)
       );
