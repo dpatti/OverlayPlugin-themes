@@ -117,8 +117,7 @@ const parseEncounter = (source: Source): Encounter => {
 
   // This is different from the encounter's notion of duration because ACT
   // may be configured to trim out periods of inactivity.
-  const duration =
-    LogData.encounterDuration(logData) || parseInt(actData.Encounter.DURATION);
+  const duration = LogData.encounterDuration(logData);
 
   const combatants = _.flatMap(actData.Combatant, (combatant) => {
     const [name, isSelf] =
@@ -691,6 +690,7 @@ interface AppState {
 }
 
 class App extends React.Component<AppProps, AppState> {
+  static readonly CLOCK_UPDATE_INTERVAL: Span = 100;
   static readonly HISTORY_KEY = "meters";
   static readonly PLAYER_NAME_KEY = "playerName";
 
@@ -782,7 +782,7 @@ class App extends React.Component<AppProps, AppState> {
     // We expect this to never be true: when the first update comes in,
     // rollingLogData is set, and it's only cleared after the last update comes
     // in.
-    if (this.state.rollingLogData === null) return;
+    if (rollingLogData === null) return;
 
     // Only use our latest log data if the encounter's timer advanced. It's
     // possible that testing `isActive` is the right way to do this instead. The
@@ -793,7 +793,7 @@ class App extends React.Component<AppProps, AppState> {
       ACT.duration(this.state.currentEncounter.source.actData) ===
         ACT.duration(update)
         ? this.state.currentEncounter.source.logData
-        : this.state.rollingLogData;
+        : rollingLogData;
 
     const encounter = parseEncounter({
       playerName: this.state.playerName,
@@ -888,10 +888,17 @@ class App extends React.Component<AppProps, AppState> {
           revives: actionID in reviveSpells ? revives + 1 : revives,
         };
       });
-    } else if (serverTime > this.state.serverTime) {
-      // We could potentially update rollingLogData too, but it's less useful
-      // because combat log line updates should be sufficient.
-      this.setState({ serverTime, lastLogLine });
+    } else if (
+      // Limit our time updates since they happen much more frequently than
+      // action updates
+      serverTime > this.state.serverTime.add(App.CLOCK_UPDATE_INTERVAL)
+    ) {
+      const rollingLogData =
+        this.state.rollingLogData === null
+          ? null
+          : LogData.updateTime(this.state.rollingLogData, serverTime);
+
+      this.setState({ serverTime, lastLogLine, rollingLogData });
     }
   }
 
