@@ -41,7 +41,7 @@ export const noBubble = (f: UIEventHandler) => (e: UIEvent) => {
   f(e);
 };
 
-export const parseQuery = <T>(f: (_: Dict) => T): T => {
+export const parseQuery = (): Dict => {
   const search = document.location.search;
   const query: Dict = {};
 
@@ -55,7 +55,7 @@ export const parseQuery = <T>(f: (_: Dict) => T): T => {
       });
   }
 
-  return f(query);
+  return query;
 };
 
 declare global {

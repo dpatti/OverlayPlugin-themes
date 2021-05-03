@@ -1,7 +1,7 @@
 import _ from "lodash";
 import React from "react";
 import * as ACT from "./act";
-import { Option, Percent, Span, addEventListener, parseQuery } from "./util";
+import { Dict, Option, Percent, Span, addEventListener } from "./util";
 
 enum Scope {
   Friendly,
@@ -35,7 +35,7 @@ type Entry = {
   sets: Array<string>;
 };
 
-const DATA0: { [actionID: number]: Entry } = {
+const DATA: { [actionID: number]: Entry } = {
   // TEST ==================================================================
   [0x99]: {
     // Thunder III (test)
@@ -144,16 +144,6 @@ const DATA0: { [actionID: number]: Entry } = {
 
   // HEALING ===============================================================
 };
-
-const options = parseQuery((options) => ({
-  sets: options.sets?.split(",") ?? [],
-  debug: "debug" in options || false,
-}));
-
-const DATA = _.pickBy(
-  DATA0,
-  ({ sets }) => _.intersection(sets, options.sets).length > 0
-);
 
 class ActionIcon {
   static readonly _cache: { [actionID: number]: string } = {};
@@ -356,7 +346,13 @@ class Timers extends React.Component<TimersProps, TimersState> {
   }
 }
 
-interface AppProps {}
+interface AppProps {
+  env: {
+    // XXX: this should be a Set<number>
+    actions: { [actionID: number]: true };
+    debug: boolean;
+  };
+}
 
 interface AppState {
   serverTime: Date;
@@ -367,6 +363,17 @@ interface AppState {
 class App extends React.Component<AppProps, AppState> {
   static STORAGE_KEY = "timers";
   static TIME_RESOLUTION = 50;
+
+  static env(query: Dict): AppProps["env"] {
+    const confSets = query.sets?.split(",") ?? [];
+    return {
+      actions: _.mapValues(
+        _.pickBy(DATA, ({ sets }) => _.intersection(sets, confSets).length > 0),
+        (_): true => true
+      ),
+      debug: "debug" in query,
+    };
+  }
 
   constructor(props: AppProps) {
     super(props);
@@ -422,7 +429,7 @@ class App extends React.Component<AppProps, AppState> {
     targetName: string
   ) {
     const actionID = parseInt(actionIDRaw, 16);
-    if (actionID in DATA) {
+    if (actionID in this.props.env.actions) {
       const { cooldown } = DATA[actionID];
       const { serverTime } = this.state;
       const payload = {

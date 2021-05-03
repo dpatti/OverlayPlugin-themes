@@ -3,13 +3,13 @@ import React from "react";
 import * as ACT from "./act";
 import { LogData, Activity } from "./log-data";
 import {
+  Dict,
   Option,
   Percent,
   Span,
   addEventListener,
   fset,
   noBubble,
-  parseQuery,
 } from "./util";
 
 const GCD = 2500;
@@ -93,10 +93,6 @@ enum View {
   Deaths = "Deaths",
   Revives = "Revives",
 }
-
-const options = parseQuery((options) => ({
-  debug: "debug" in options || false,
-}));
 
 // When duration is 0, ACT sends the dps as the string "∞"
 const parseRate = (s: string): number => {
@@ -603,6 +599,7 @@ interface DamageMeterProps {
   data: Encounter;
   encounterOptions: Array<IndexedEncounter>;
   onSelectEncounter: (index: Option<number>) => void;
+  debug: boolean;
 }
 
 interface DamageMeterState {
@@ -651,7 +648,7 @@ class DamageMeter extends React.Component<DamageMeterProps, DamageMeterState> {
           currentView={this.state.currentView}
           combatants={combatants}
         />
-        {!options.debug ? null : (
+        {!this.props.debug ? null : (
           <div>
             <Debugger data={encounter} />
           </div>
@@ -679,7 +676,9 @@ class Debugger extends React.PureComponent<DebuggerProps> {
   }
 }
 
-interface AppProps {}
+interface AppProps {
+  env: { debug: boolean };
+}
 
 interface AppState {
   playerName: string;
@@ -695,8 +694,15 @@ class App extends React.Component<AppProps, AppState> {
   static readonly HISTORY_KEY = "meters";
   static readonly PLAYER_NAME_KEY = "playerName";
 
+  static env(query: Dict): AppProps["env"] {
+    return {
+      debug: "debug" in query,
+    };
+  }
+
   constructor(props: AppProps) {
     super(props);
+
     this.state = {
       playerName: ACT.YOU,
       currentEncounter: null,
@@ -924,6 +930,7 @@ class App extends React.Component<AppProps, AppState> {
         data={encounterView}
         encounterOptions={encounterOptions}
         onSelectEncounter={(index) => this.onSelectEncounter(index)}
+        debug={this.props.env.debug}
       />
     ) : (
       <h3>Awaiting data.</h3>
