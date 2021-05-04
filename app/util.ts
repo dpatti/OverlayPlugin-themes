@@ -23,6 +23,7 @@ export type SerializedUnstable<T> = T extends Date
 
 export type Percent = number;
 export type Span = number;
+export type RelativeTime = number;
 
 // helper to functionally set a key in an object by returning a new copy
 export const fset = <A, B>(obj: A, extensions: B): A & B =>

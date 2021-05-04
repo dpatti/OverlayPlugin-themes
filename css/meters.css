@@ -353,3 +353,24 @@ li:last-child {
 .timers .row:hover .close {
   width: 2em;
 }
+
+/* Countdown */
+.countdown .bar.fast {
+  transition: width .05s linear;
+}
+.countdown .row {
+  height: 1.7em;
+  display: flex;
+  align-items: center;
+}
+.countdown .text-overlay {
+  font-size: 0.9em;
+  position: initial;
+  top: initial;
+  bottom: initial;
+  left: initial;
+  right: initial;
+  line-height: initial;
+
+  flex-grow: 1;
+}

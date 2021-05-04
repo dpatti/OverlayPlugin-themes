@@ -3,6 +3,7 @@ import ReactDOM from "react-dom";
 
 import Meters from "./meters";
 import Timers from "./timers";
+import Countdown from "./countdown";
 
 import { Dict, parseQuery } from "./util";
 
@@ -21,6 +22,8 @@ const runApp = <T>(App: App<T>): void => {
 
 if ("timers" in query) {
   runApp(Timers);
+} else if ("countdown" in query) {
+  runApp(Countdown);
 } else {
   runApp(Meters);
 }
